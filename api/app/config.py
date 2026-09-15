@@ -1,5 +1,6 @@
 from functools import lru_cache
 from pathlib import Path
+from typing import Literal
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -11,6 +12,20 @@ class Settings(BaseSettings):
 
     database_url: str = "postgresql://portfolio:portfolio@localhost:5433/portfolio"
     cors_origins: str = "http://localhost:8080"
+
+    # Bearer token for PUT /admin/content; empty disables the endpoint.
+    admin_token: str = ""
+
+    # Embeddings: same model in both backends so indexed and query vectors match.
+    embedding_backend: Literal["local", "http"] = "local"
+    embedding_model: str = "intfloat/multilingual-e5-small"
+    embedding_dim: int = 384
+    query_prefix: str = "query: "
+    passage_prefix: str = "passage: "
+    embedding_api_url: str = "https://router.huggingface.co/hf-inference/models/{model}/pipeline/feature-extraction"
+    embedding_api_token: str = ""
+
+    text_search_config: str = "spanish"
 
     @property
     def allowed_origins(self) -> list[str]:

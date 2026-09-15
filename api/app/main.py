@@ -5,6 +5,7 @@ from fastapi.responses import JSONResponse
 
 from app import db
 from app.config import get_settings
+from app.routes import admin
 
 app = FastAPI(title="Portfolio search", version="0.1.0")
 
@@ -14,6 +15,8 @@ app.add_middleware(
     allow_methods=["GET", "POST", "DELETE"],
     allow_headers=["Content-Type"],
 )
+
+app.include_router(admin.router)
 
 
 @app.get("/health")
