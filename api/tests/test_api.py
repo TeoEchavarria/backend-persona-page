@@ -1,6 +1,12 @@
 from tests.conftest import TopicEncoder, content_payload, sync
 
 
+def search(client, query: str, **body) -> dict:
+    response = client.post("/search", json={"query": query, **body})
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
 def test_health(client):
     assert client.get("/health").json() == {"status": "ok", "database": "ok"}
 
@@ -30,3 +36,21 @@ def test_sync_updates_edits_and_removals(client):
     assert report["removed_notes"] == 1
 
     assert sync(client).json()["embedded"] == 3  # jardín's two paragraphs and the original soup
+
+
+def test_search_returns_paragraph_note_and_score(client):
+    body = search(client, "¿cuánto sol necesita el tomate?")
+
+    top = body["results"][0]
+    assert top["note"] == {"slug": "jardin", "title": "Jardín", "kind": "project"}
+    assert "tomate" in top["text"]
+    assert top["headings"] == ["Plantas"]
+    assert top["score"] > 0 and top["vector_rank"] == 1
+    assert body["confidence"]["band"] in {"high", "medium", "far"}
+    assert len(body["results"]) <= 5
+
+
+def test_kind_filter(client):
+    body = search(client, "horno pan", kind="project")
+    assert body["results"]
+    assert all(result["note"]["kind"] == "project" for result in body["results"])

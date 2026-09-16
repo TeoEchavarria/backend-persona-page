@@ -27,6 +27,16 @@ class Settings(BaseSettings):
 
     text_search_config: str = "spanish"
 
+    # Search
+    results_limit: int = 5
+    candidate_pool: int = 30
+    rrf_k: int = 60
+
+    # Confidence bands, calibrated with scripts/calibrate.py
+    z_high: float = 3.0
+    z_medium: float = 2.2
+    gap_high: float = 0.02
+
     @property
     def allowed_origins(self) -> list[str]:
         return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]

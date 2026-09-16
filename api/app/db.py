@@ -1,5 +1,6 @@
 from collections.abc import Iterator
 from contextlib import contextmanager
+from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
@@ -91,3 +92,78 @@ def delete_chunks_except(conn: psycopg.Connection, keep: set[str]) -> int:
 
 def delete_notes_except(conn: psycopg.Connection, slugs: set[str]) -> int:
     return conn.execute("delete from notes where not (slug = any(%s))", (list(slugs),)).rowcount
+
+
+# ── Search ────────────────────────────────────────────────────────────
+
+_KIND_FILTER = "(%(kind)s::text is null or n.kind = %(kind)s)"
+
+
+@dataclass(frozen=True)
+class SimilarityStats:
+    mean: float
+    std: float
+    top: list[float]
+
+
+def vector_ranking(conn: psycopg.Connection, vector: np.ndarray, kind: str | None, limit: int) -> list[tuple[str, float]]:
+    # <#> is the negative inner product; with unit vectors, -(a <#> b) is the cosine.
+    rows = conn.execute(
+        f"""
+        select c.id, -(c.embedding <#> %(v)s) as similarity
+        from chunks c join notes n on n.id = c.note_id
+        where {_KIND_FILTER}
+        order by c.embedding <#> %(v)s
+        limit %(limit)s
+        """,
+        {"v": vector, "kind": kind, "limit": limit},
+    )
+    return [(row["id"], row["similarity"]) for row in rows]
+
+
+def similarity_stats(conn: psycopg.Connection, vector: np.ndarray, kind: str | None) -> SimilarityStats:
+    row = conn.execute(
+        f"""
+        select avg(s) as mean, coalesce(stddev_pop(s), 0) as std,
+               (array_agg(s order by s desc))[1:2] as top
+        from (
+            select -(c.embedding <#> %(v)s) as s
+            from chunks c join notes n on n.id = c.note_id
+            where {_KIND_FILTER}
+        ) scored
+        """,
+        {"v": vector, "kind": kind},
+    ).fetchone()
+    return SimilarityStats(row["mean"] or 0.0, row["std"], list(row["top"] or []))
+
+
+def text_ranking(conn: psycopg.Connection, query: str, kind: str | None, limit: int) -> list[tuple[str, float]]:
+    # plainto_tsquery ANDs every word; OR-ing them suits natural-language questions better.
+    config = get_settings().text_search_config
+    rows = conn.execute(
+        f"""
+        with q as (
+            select nullif(replace(plainto_tsquery('{config}', %(q)s)::text, '&', '|'), '')::tsquery as tsq
+        )
+        select c.id, ts_rank(c.tsv, q.tsq) as rank
+        from chunks c join notes n on n.id = c.note_id, q
+        where q.tsq is not null and c.tsv @@ q.tsq and {_KIND_FILTER}
+        order by rank desc
+        limit %(limit)s
+        """,
+        {"q": query, "kind": kind, "limit": limit},
+    )
+    return [(row["id"], row["rank"]) for row in rows]
+
+
+def fetch_chunks(conn: psycopg.Connection, ids: list[str], vector: np.ndarray) -> dict[str, dict]:
+    rows = conn.execute(
+        """
+        select c.id, c.text, c.headings, c.position, -(c.embedding <#> %s) as similarity,
+               n.id as note_id, n.slug, n.title, n.kind
+        from chunks c join notes n on n.id = c.note_id
+        where c.id = any(%s)
+        """,
+        (vector, ids),
+    )
+    return {row["id"]: row for row in rows}
