@@ -32,10 +32,10 @@ class Settings(BaseSettings):
     candidate_pool: int = 30
     rrf_k: int = 60
 
-    # Confidence bands, calibrated with scripts/calibrate.py
-    z_high: float = 3.0
-    z_medium: float = 2.2
-    gap_high: float = 0.02
+    # Confidence bands on the margin (best − mean similarity), calibrated with scripts/calibrate.py
+    margin_high: float = 0.075
+    margin_medium: float = 0.046
+    gap_high: float = 0.045
 
     @property
     def allowed_origins(self) -> list[str]:

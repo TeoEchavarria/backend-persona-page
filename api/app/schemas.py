@@ -31,11 +31,13 @@ class SearchResult(BaseModel):
 class ConfidenceOut(BaseModel):
     band: Band
     message: str
+    margin: float
     z: float
     gap: float
     top_similarity: float
-    z_high: float
-    z_medium: float
+    mean_similarity: float
+    margin_high: float
+    margin_medium: float
     gap_high: float
 
 

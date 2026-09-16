@@ -16,6 +16,7 @@ MESSAGES = {
 @dataclass(frozen=True)
 class Confidence:
     band: str
+    margin: float
     z: float
     gap: float
     top_similarity: float
@@ -42,22 +43,24 @@ def z_score(value: float, mean: float, std: float) -> float:
     return 0.0 if std == 0 else (value - mean) / std
 
 
-def confidence_band(z: float, gap: float, settings: Settings) -> str:
-    if z >= settings.z_high or (z >= settings.z_medium and gap >= settings.gap_high):
+def confidence_band(margin: float, gap: float, settings: Settings) -> str:
+    """Bands use the raw margin over the mean, not z: off-topic queries score uniformly low,
+    which shrinks the spread and inflates their z-score."""
+    if margin >= settings.margin_high or (margin >= settings.margin_medium and gap >= settings.gap_high):
         return "high"
-    if z >= settings.z_medium:
+    if margin >= settings.margin_medium:
         return "medium"
     return "far"
 
 
 def confidence(stats: db.SimilarityStats, settings: Settings) -> Confidence:
     if not stats.top:
-        return Confidence("far", 0.0, 0.0, 0.0, MESSAGES["far"])
+        return Confidence("far", 0.0, 0.0, 0.0, 0.0, MESSAGES["far"])
     top = stats.top[0]
     gap = top - stats.top[1] if len(stats.top) > 1 else 0.0
-    z = z_score(top, stats.mean, stats.std)
-    band = confidence_band(z, gap, settings)
-    return Confidence(band, z, gap, top, MESSAGES[band])
+    margin = top - stats.mean
+    band = confidence_band(margin, gap, settings)
+    return Confidence(band, margin, z_score(top, stats.mean, stats.std), gap, top, MESSAGES[band])
 
 
 def hybrid_search(

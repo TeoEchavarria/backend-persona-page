@@ -22,7 +22,8 @@ def run_search(
         query_vector = encoder.encode_queries([query])[0]
 
     hits = search.hybrid_search(conn, query, query_vector, request.kind, settings)
-    confidence = search.confidence(db.similarity_stats(conn, query_vector, request.kind), settings)
+    stats = db.similarity_stats(conn, query_vector, request.kind)
+    confidence = search.confidence(stats, settings)
     rows = db.fetch_chunks(conn, [hit.chunk_id for hit in hits], query_vector)
 
     return SearchResponse(
@@ -31,11 +32,13 @@ def run_search(
         confidence=ConfidenceOut(
             band=confidence.band,
             message=confidence.message,
+            margin=confidence.margin,
             z=confidence.z,
             gap=confidence.gap,
             top_similarity=confidence.top_similarity,
-            z_high=settings.z_high,
-            z_medium=settings.z_medium,
+            mean_similarity=stats.mean,
+            margin_high=settings.margin_high,
+            margin_medium=settings.margin_medium,
             gap_high=settings.gap_high,
         ),
         rrf_k=settings.rrf_k,
