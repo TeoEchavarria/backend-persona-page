@@ -1,6 +1,7 @@
 import numpy as np
 import pytest
 
+from app import intent, markov
 from app.config import Settings
 from app.db import SimilarityStats
 from app.embeddings import normalize
@@ -60,3 +61,78 @@ def test_update_context_drifts_towards_what_is_read():
         context = update_context(context, unit(0, 1), beta=0.8)
     assert context[1] > context[0]
     assert np.linalg.norm(context) == pytest.approx(1.0)
+
+
+# ── Markov ────────────────────────────────────────────────────────────
+
+CENTROIDS = np.stack([unit(1, 0, 0), unit(0.9, 0.1, 0), unit(0, 1, 0), unit(0, 0.1, 1)])
+
+
+def test_prior_is_a_stochastic_matrix_without_self_loops():
+    prior = markov.semantic_prior(CENTROIDS, temperature=0.1)
+    assert np.allclose(prior.sum(axis=1), 1)
+    assert np.allclose(np.diag(prior), 0)
+    assert prior[0].argmax() == 1
+
+
+def test_without_events_transitions_equal_the_prior():
+    prior = markov.semantic_prior(CENTROIDS, 0.1)
+    assert np.allclose(markov.transition_matrix(np.zeros((4, 4)), prior, strength=2.0), prior)
+
+
+def test_observed_transitions_shift_the_matrix():
+    prior = markov.semantic_prior(CENTROIDS, 0.1)
+    index = {10: 0, 11: 1, 12: 2, 13: 3}
+    visits = [("s", "read", 10), ("s", "read", 10), ("s", "finish", 10), ("s", "read", 12)] * 1
+    visits += [("t", "read", 10), ("t", "read", 12)]
+    counts = markov.transition_counts(visits, index, finished_weight=2.0)
+    assert counts[0, 2] == pytest.approx(3.0)
+    assert counts.sum() == pytest.approx(3.0)
+
+    transitions = markov.transition_matrix(counts, prior, strength=2.0)
+    assert np.allclose(transitions.sum(axis=1), 1)
+    assert transitions[0, 2] > prior[0, 2]
+    assert transitions[0].argmax() == 2
+
+
+def test_random_walk_reaches_two_steps_away():
+    # A chain 0 -> 1 -> 2: from 0, node 2 is only reachable through 1.
+    chain = np.array([[0, 1, 0], [0, 0, 1], [1, 0, 0]], dtype=float)
+    scores = markov.random_walk_with_restart(chain, np.array([1.0, 0, 0]), restart_probability=0.3)
+    assert scores.sum() == pytest.approx(1.0)
+    assert scores[0] > scores[1] > scores[2] > 0
+
+
+def test_pagerank_prefers_the_hub():
+    star = np.array([[0, 1, 0], [0.5, 0, 0.5], [0, 1, 0]], dtype=float)
+    ranks = markov.pagerank(star, damping=0.85)
+    assert ranks.sum() == pytest.approx(1.0)
+    assert ranks.argmax() == 1
+
+
+def test_mmr_skips_near_duplicates():
+    embeddings = np.stack([unit(1, 0), unit(1, 0.01), unit(0, 1)])
+    relevance = np.array([1.0, 0.95, 0.6])
+    assert markov.maximal_marginal_relevance(relevance, embeddings, [0, 1, 2], k=2, balance=0.5) == [0, 2]
+    assert markov.maximal_marginal_relevance(relevance, embeddings, [0, 1, 2], k=2, balance=1.0) == [0, 1]
+
+
+# ── HMM ───────────────────────────────────────────────────────────────
+
+
+def test_forward_moves_belief_towards_the_observed_intent_and_is_sticky():
+    centroids = np.stack([unit(1, 0), unit(0, 1)])
+    transitions = intent.sticky_transitions(2, stickiness=0.8)
+    assert np.allclose(transitions.sum(axis=1), 1)
+
+    belief = intent.forward_step(None, unit(1, 0.2), centroids, transitions, temperature=0.1)
+    assert belief.sum() == pytest.approx(1.0)
+    assert belief[0] > 0.9
+
+    # One ambiguous observation does not erase what came before.
+    belief = intent.forward_step(belief, unit(1, 1), centroids, transitions, temperature=0.1)
+    assert belief[0] > 0.5
+
+    for _ in range(3):
+        belief = intent.forward_step(belief, unit(0, 1), centroids, transitions, temperature=0.1)
+    assert belief[1] > 0.9
