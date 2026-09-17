@@ -1,8 +1,15 @@
+import numpy as np
 import pytest
 
 from app.config import Settings
 from app.db import SimilarityStats
+from app.embeddings import normalize
 from app.search import confidence, confidence_band, reciprocal_rank_fusion, z_score
+from app.session import effective_query, update_context
+
+
+def unit(*values: float) -> np.ndarray:
+    return normalize(np.array(values, dtype=float))
 
 
 # ── Search ────────────────────────────────────────────────────────────
@@ -32,3 +39,24 @@ def test_confidence_from_similarity_stats():
     assert result.band == "high"
     assert confidence(SimilarityStats(0, 0, []), Settings()).band == "far"
     assert z_score(1.0, 1.0, 0.0) == 0.0
+
+
+# ── Rocchio ───────────────────────────────────────────────────────────
+
+
+def test_effective_query_blends_and_stays_unit_length():
+    q, c = unit(1, 0), unit(0, 1)
+    assert effective_query(q, None) is q
+    blended = effective_query(q, c, alpha=0.7)
+    assert np.linalg.norm(blended) == pytest.approx(1.0)
+    assert blended[0] > blended[1] > 0
+
+
+def test_update_context_drifts_towards_what_is_read():
+    first = update_context(None, unit(1, 0))
+    assert np.allclose(first, unit(1, 0))
+    context = first
+    for _ in range(10):
+        context = update_context(context, unit(0, 1), beta=0.8)
+    assert context[1] > context[0]
+    assert np.linalg.norm(context) == pytest.approx(1.0)

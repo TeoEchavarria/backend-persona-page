@@ -31,4 +31,5 @@ def sync_content(content: ContentSync, encoder: Encoder = Depends(get_encoder)) 
     db.init_schema()
     with db.connect() as conn, embedding_errors():
         report = ingest.sync(conn, encoder, notes, content.force)
+        db.purge_old_sessions(conn, get_settings().event_retention_days)
     return SyncResult(**report.__dict__)

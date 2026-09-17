@@ -37,6 +37,12 @@ class Settings(BaseSettings):
     margin_medium: float = 0.046
     gap_high: float = 0.045
 
+    # Rocchio
+    rocchio_alpha: float = 0.7
+    rocchio_beta: float = 0.8
+
+    event_retention_days: int = 180
+
     @property
     def allowed_origins(self) -> list[str]:
         return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]

@@ -78,7 +78,7 @@ def client():
     from app.main import app
 
     with psycopg.connect(TEST_DATABASE_URL, autocommit=True) as conn:
-        conn.execute("drop table if exists chunks, notes cascade")
+        conn.execute("drop table if exists events, sessions, chunks, notes cascade")
 
     app.dependency_overrides[get_encoder] = TopicEncoder
     with TestClient(app) as test_client:

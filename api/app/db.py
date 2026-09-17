@@ -2,6 +2,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
+from uuid import UUID
 
 import numpy as np
 import psycopg
@@ -27,6 +28,10 @@ def connect() -> Iterator[psycopg.Connection]:
 def get_connection() -> Iterator[psycopg.Connection]:
     with connect() as conn:
         yield conn
+
+
+def as_array(value) -> np.ndarray | None:
+    return None if value is None else np.asarray(value.to_numpy(), dtype=np.float32)
 
 
 def init_schema() -> None:
@@ -92,6 +97,12 @@ def delete_chunks_except(conn: psycopg.Connection, keep: set[str]) -> int:
 
 def delete_notes_except(conn: psycopg.Connection, slugs: set[str]) -> int:
     return conn.execute("delete from notes where not (slug = any(%s))", (list(slugs),)).rowcount
+
+
+def purge_old_sessions(conn: psycopg.Connection, days: int) -> int:
+    return conn.execute(
+        "delete from sessions where updated_at < now() - make_interval(days => %s)", (days,)
+    ).rowcount
 
 
 # ── Search ────────────────────────────────────────────────────────────
@@ -167,3 +178,70 @@ def fetch_chunks(conn: psycopg.Connection, ids: list[str], vector: np.ndarray) -
         (vector, ids),
     )
     return {row["id"]: row for row in rows}
+
+
+def chunk_embedding(conn: psycopg.Connection, chunk_id: str) -> tuple[np.ndarray, int] | None:
+    row = conn.execute("select embedding, note_id from chunks where id = %s", (chunk_id,)).fetchone()
+    return (as_array(row["embedding"]), row["note_id"]) if row else None
+
+
+# ── Notes ─────────────────────────────────────────────────────────────
+
+
+def list_notes(conn: psycopg.Connection) -> list[dict]:
+    return conn.execute("select id, slug, kind, title, tags, summary, link from notes order by id").fetchall()
+
+
+def get_note(conn: psycopg.Connection, slug: str) -> dict | None:
+    return conn.execute(
+        "select id, slug, kind, title, tags, summary, link from notes where slug = %s", (slug,)
+    ).fetchone()
+
+
+def note_chunks(conn: psycopg.Connection, note_id: int) -> list[dict]:
+    return conn.execute(
+        "select id, position, headings, text from chunks where note_id = %s order by position", (note_id,)
+    ).fetchall()
+
+
+def note_centroids(conn: psycopg.Connection) -> list[dict]:
+    rows = conn.execute(
+        """
+        select n.id, n.slug, n.kind, n.title, avg(c.embedding) as centroid
+        from notes n join chunks c on c.note_id = n.id
+        group by n.id order by n.id
+        """
+    ).fetchall()
+    return [{**row, "centroid": as_array(row["centroid"])} for row in rows]
+
+
+def note_id_for_slug(conn: psycopg.Connection, slug: str) -> int | None:
+    row = conn.execute("select id from notes where slug = %s", (slug,)).fetchone()
+    return row["id"] if row else None
+
+
+# ── Sessions and events ───────────────────────────────────────────────
+
+
+def get_or_create_session(conn: psycopg.Connection, session_id: UUID) -> dict:
+    conn.execute("insert into sessions (id) values (%s) on conflict (id) do nothing", (session_id,))
+    row = conn.execute("select id, context from sessions where id = %s", (session_id,)).fetchone()
+    return {**row, "context": as_array(row["context"])}
+
+
+def save_session(conn: psycopg.Connection, session_id: UUID, context: np.ndarray | None) -> None:
+    conn.execute("update sessions set context = %s, updated_at = now() where id = %s", (context, session_id))
+
+
+def insert_event(
+    conn: psycopg.Connection,
+    session_id: UUID,
+    kind: str,
+    chunk_id: str | None = None,
+    note_id: int | None = None,
+    query: str | None = None,
+) -> None:
+    conn.execute(
+        "insert into events (session_id, kind, chunk_id, note_id, query) values (%s, %s, %s, %s, %s)",
+        (session_id, kind, chunk_id, note_id, query),
+    )

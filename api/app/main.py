@@ -5,7 +5,7 @@ from fastapi.responses import JSONResponse
 
 from app import db
 from app.config import get_settings
-from app.routes import admin, search
+from app.routes import admin, events, notes, search
 
 app = FastAPI(title="Portfolio search", version="0.1.0")
 
@@ -17,6 +17,8 @@ app.add_middleware(
 )
 
 app.include_router(search.router)
+app.include_router(events.router)
+app.include_router(notes.router)
 app.include_router(admin.router)
 
 

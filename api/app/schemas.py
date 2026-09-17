@@ -1,4 +1,5 @@
 from typing import Literal
+from uuid import UUID
 
 from pydantic import BaseModel, Field
 
@@ -14,7 +15,9 @@ class NoteRef(BaseModel):
 
 class SearchRequest(BaseModel):
     query: str = Field(min_length=1, max_length=300)
+    session_id: UUID | None = None
     kind: Kind | None = None
+    use_context: bool = True
 
 
 class SearchResult(BaseModel):
@@ -41,11 +44,51 @@ class ConfidenceOut(BaseModel):
     gap_high: float
 
 
+class ContextOut(BaseModel):
+    available: bool
+    applied: bool
+    note: NoteRef | None = None
+    alpha: float
+    beta: float
+    query_alignment: float | None = None
+
+
 class SearchResponse(BaseModel):
+    session_id: UUID
     query: str
     results: list[SearchResult]
     confidence: ConfidenceOut
+    context: ContextOut
     rrf_k: int
+
+
+class EventRequest(BaseModel):
+    session_id: UUID
+    kind: Literal["read", "select", "finish"]
+    chunk_id: str | None = Field(default=None, max_length=64)
+    note_slug: str | None = Field(default=None, max_length=120)
+
+
+class SessionState(BaseModel):
+    session_id: UUID
+    context: ContextOut
+
+
+class ChunkOut(BaseModel):
+    id: str
+    position: int
+    headings: list[str]
+    text: str
+
+
+class NoteSummary(NoteRef):
+    tags: list[str]
+    summary: str | None
+    link: str | None
+
+
+class NoteOut(NoteSummary):
+    chunks: list[ChunkOut]
 
 
 class NoteSource(BaseModel):
