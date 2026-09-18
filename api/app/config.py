@@ -43,7 +43,7 @@ class Settings(BaseSettings):
 
     # Markov / random walk
     markov_lambda: float = 2.0
-    markov_temperature: float = 0.05
+    markov_temperature: float = 0.015  # e5 centroids all sit at cos 0.92–0.96
     finished_weight: float = 2.0
     restart_probability: float = 0.3
     pagerank_damping: float = 0.85
