@@ -54,6 +54,7 @@ def run_search(
             gap_high=settings.gap_high,
         ),
         context=visitor.context_out(conn, settings, session, applied=use_context, query=query_vector),
+        intents=visitor.intents_out(conn, settings, session),
         rrf_k=settings.rrf_k,
     )
 

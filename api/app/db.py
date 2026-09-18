@@ -99,6 +99,16 @@ def delete_notes_except(conn: psycopg.Connection, slugs: set[str]) -> int:
     return conn.execute("delete from notes where not (slug = any(%s))", (list(slugs),)).rowcount
 
 
+def replace_intents(conn: psycopg.Connection, intents: list[dict]) -> None:
+    with conn.transaction():
+        conn.execute("delete from intents")
+        for position, intent in enumerate(intents):
+            conn.execute(
+                "insert into intents (id, position, label, description, note_slugs) values (%s, %s, %s, %s, %s)",
+                (intent["id"], position, intent["label"], intent.get("description", ""), intent.get("notes", [])),
+            )
+
+
 def purge_old_sessions(conn: psycopg.Connection, days: int) -> int:
     return conn.execute(
         "delete from sessions where updated_at < now() - make_interval(days => %s)", (days,)
@@ -220,17 +230,26 @@ def note_id_for_slug(conn: psycopg.Connection, slug: str) -> int | None:
     return row["id"] if row else None
 
 
+def list_intents(conn: psycopg.Connection) -> list[dict]:
+    return conn.execute("select id, label, description, note_slugs from intents order by position").fetchall()
+
+
 # ── Sessions and events ───────────────────────────────────────────────
 
 
 def get_or_create_session(conn: psycopg.Connection, session_id: UUID) -> dict:
     conn.execute("insert into sessions (id) values (%s) on conflict (id) do nothing", (session_id,))
-    row = conn.execute("select id, context from sessions where id = %s", (session_id,)).fetchone()
+    row = conn.execute("select id, context, intent_belief from sessions where id = %s", (session_id,)).fetchone()
     return {**row, "context": as_array(row["context"])}
 
 
-def save_session(conn: psycopg.Connection, session_id: UUID, context: np.ndarray | None) -> None:
-    conn.execute("update sessions set context = %s, updated_at = now() where id = %s", (context, session_id))
+def save_session(
+    conn: psycopg.Connection, session_id: UUID, context: np.ndarray | None, belief: list[float] | None
+) -> None:
+    conn.execute(
+        "update sessions set context = %s, intent_belief = %s, updated_at = now() where id = %s",
+        (context, belief, session_id),
+    )
 
 
 def insert_event(
@@ -245,3 +264,14 @@ def insert_event(
         "insert into events (session_id, kind, chunk_id, note_id, query) values (%s, %s, %s, %s, %s)",
         (session_id, kind, chunk_id, note_id, query),
     )
+
+
+def note_visits(conn: psycopg.Connection) -> list[dict]:
+    """Every note-level event, grouped by session in time order: the raw material for transition counts."""
+    return conn.execute(
+        """
+        select session_id, kind, note_id from events
+        where note_id is not null and kind in ('read', 'select', 'finish')
+        order by session_id, created_at, id
+        """
+    ).fetchall()

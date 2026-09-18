@@ -1,4 +1,5 @@
 import hashlib
+import json
 import os
 import re
 from pathlib import Path
@@ -55,7 +56,7 @@ def content_payload(**extra) -> dict:
         for folder in kinds
         for path in sorted((FIXTURES / folder).glob("*.md"))
     ]
-    return {"notes": notes, **extra}
+    return {"notes": notes, "intents": json.loads((FIXTURES / "intents.json").read_text()), **extra}
 
 
 def sync(client, **extra):
@@ -78,7 +79,7 @@ def client():
     from app.main import app
 
     with psycopg.connect(TEST_DATABASE_URL, autocommit=True) as conn:
-        conn.execute("drop table if exists events, sessions, chunks, notes cascade")
+        conn.execute("drop table if exists events, sessions, intents, chunks, notes cascade")
 
     app.dependency_overrides[get_encoder] = TopicEncoder
     with TestClient(app) as test_client:

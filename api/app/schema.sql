@@ -24,9 +24,18 @@ create table if not exists chunks (
 create index if not exists chunks_tsv_idx on chunks using gin (tsv);
 create index if not exists chunks_note_idx on chunks (note_id, position);
 
+create table if not exists intents (
+    id text primary key,
+    position int not null,
+    label text not null,
+    description text not null default '',
+    note_slugs text[] not null default '{}'
+);
+
 create table if not exists sessions (
     id uuid primary key,
     context vector({dim}),
+    intent_belief double precision[],
     created_at timestamptz not null default now(),
     updated_at timestamptz not null default now()
 );

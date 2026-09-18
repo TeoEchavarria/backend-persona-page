@@ -41,6 +41,18 @@ class Settings(BaseSettings):
     rocchio_alpha: float = 0.7
     rocchio_beta: float = 0.8
 
+    # Markov / random walk
+    markov_lambda: float = 2.0
+    markov_temperature: float = 0.05
+    finished_weight: float = 2.0
+    restart_probability: float = 0.3
+    pagerank_damping: float = 0.85
+    mmr_lambda: float = 0.7
+
+    # HMM
+    intent_stickiness: float = 0.8
+    intent_temperature: float = 0.05
+
     event_retention_days: int = 180
 
     @property

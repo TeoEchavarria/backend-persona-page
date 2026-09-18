@@ -26,10 +26,11 @@ def sync_content(content: ContentSync, encoder: Encoder = Depends(get_encoder)) 
     slugs = [note.slug for note in notes]
     if len(slugs) != len(set(slugs)):
         raise HTTPException(422, "Hay notas con el mismo slug")
+    intents = [intent.model_dump() for intent in content.intents]
 
     # The first sync against an empty database creates the schema (and the vector extension).
     db.init_schema()
     with db.connect() as conn, embedding_errors():
-        report = ingest.sync(conn, encoder, notes, content.force)
+        report = ingest.sync(conn, encoder, notes, intents, content.force)
         db.purge_old_sessions(conn, get_settings().event_retention_days)
     return SyncResult(**report.__dict__)

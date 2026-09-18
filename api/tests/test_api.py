@@ -1,5 +1,7 @@
 from uuid import uuid4
 
+import pytest
+
 from tests.conftest import TopicEncoder, content_payload, sync
 
 
@@ -88,6 +90,17 @@ def test_reading_builds_context_that_tilts_ambiguous_queries(client):
     assert cleared["context"]["available"] is False
 
 
+def test_intent_belief_follows_what_is_read(client):
+    session_id = str(uuid4())
+    jardin = client.get("/notes/jardin").json()
+    for chunk in jardin["chunks"]:
+        state = read(client, session_id, chunk["id"])
+
+    intents = {intent["id"]: intent["probability"] for intent in state["intents"]}
+    assert sum(intents.values()) == pytest.approx(1.0)
+    assert intents["casa"] > intents["tecnica"]
+
+
 def test_note_view_and_unknown_note(client):
     note = client.get("/notes/ejemplo").json()
     assert note["title"] == "Proyecto de ejemplo"
@@ -103,3 +116,22 @@ def test_events_validate_their_target(client):
     )
     finish = client.post("/events", json={"session_id": session_id, "kind": "finish", "note_slug": "jardin"})
     assert finish.status_code == 200
+
+
+def test_related_notes_and_graph(client):
+    related = client.get("/notes/jardin/related", params={"k": 2}).json()
+    assert len(related) == 2
+    assert "jardin" not in {note["slug"] for note in related}
+
+    graph = client.get("/graph").json()
+    assert {node["slug"] for node in graph["nodes"]} == {"ejemplo", "jardin", "cocina"}
+    outgoing = sum(edge["probability"] for edge in graph["edges"] if edge["source"] == "jardin")
+    assert outgoing == pytest.approx(1.0)
+    assert sum(node["pagerank"] for node in graph["nodes"]) == pytest.approx(1.0)
+
+
+def test_notes_are_listed_most_central_first(client):
+    notes = client.get("/notes").json()
+    centralities = [note["centrality"] for note in notes]
+    assert len(notes) == 3
+    assert centralities == sorted(centralities, reverse=True)

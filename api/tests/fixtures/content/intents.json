@@ -1,0 +1,4 @@
+[
+  { "id": "tecnica", "label": "Técnica", "notes": ["ejemplo"] },
+  { "id": "casa", "label": "Casa", "notes": ["jardin", "cocina"] }
+]

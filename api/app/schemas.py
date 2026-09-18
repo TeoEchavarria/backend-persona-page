@@ -53,12 +53,19 @@ class ContextOut(BaseModel):
     query_alignment: float | None = None
 
 
+class IntentOut(BaseModel):
+    id: str
+    label: str
+    probability: float
+
+
 class SearchResponse(BaseModel):
     session_id: UUID
     query: str
     results: list[SearchResult]
     confidence: ConfidenceOut
     context: ContextOut
+    intents: list[IntentOut]
     rrf_k: int
 
 
@@ -72,6 +79,7 @@ class EventRequest(BaseModel):
 class SessionState(BaseModel):
     session_id: UUID
     context: ContextOut
+    intents: list[IntentOut]
 
 
 class ChunkOut(BaseModel):
@@ -85,10 +93,39 @@ class NoteSummary(NoteRef):
     tags: list[str]
     summary: str | None
     link: str | None
+    centrality: float | None = None
 
 
 class NoteOut(NoteSummary):
     chunks: list[ChunkOut]
+
+
+class RelatedNote(NoteRef):
+    score: float
+
+
+class GraphNode(NoteRef):
+    pagerank: float
+
+
+class GraphEdge(BaseModel):
+    source: str
+    target: str
+    probability: float
+    prior: float
+    observed: float
+
+
+class GraphOut(BaseModel):
+    nodes: list[GraphNode]
+    edges: list[GraphEdge]
+    strength: float
+    temperature: float
+    restart_probability: float
+    damping: float
+    finished_weight: float
+    intent_stickiness: float
+    intent_temperature: float
 
 
 class NoteSource(BaseModel):
@@ -97,8 +134,16 @@ class NoteSource(BaseModel):
     source: str = Field(max_length=200_000)
 
 
+class IntentIn(BaseModel):
+    id: str
+    label: str
+    description: str = ""
+    notes: list[str] = []
+
+
 class ContentSync(BaseModel):
     notes: list[NoteSource] = Field(max_length=2_000)
+    intents: list[IntentIn] = []
     force: bool = False
 
 
