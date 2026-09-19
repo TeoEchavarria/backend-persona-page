@@ -1,4 +1,5 @@
-from functools import lru_cache
+import os
+import threading
 from typing import Protocol
 
 import httpx
@@ -59,9 +60,19 @@ class HttpEncoder(_PrefixedEncoder):
         return normalize(vectors)
 
 
-@lru_cache
+_encoder: Encoder | None = None
+_encoder_lock = threading.Lock()
+
+
 def get_encoder() -> Encoder:
-    settings = get_settings()
-    if settings.embedding_backend == "http":
-        return HttpEncoder(settings)
-    return LocalEncoder(settings)
+    """One encoder per process; requests run in a thread pool, so creation is locked."""
+    global _encoder
+    with _encoder_lock:
+        if _encoder is None:
+            settings = get_settings()
+            if settings.embedding_backend == "http":
+                _encoder = HttpEncoder(settings)
+            else:
+                os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
+                _encoder = LocalEncoder(settings)
+        return _encoder

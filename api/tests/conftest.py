@@ -75,15 +75,15 @@ def client():
     except psycopg.OperationalError:
         pytest.skip(f"Postgres de prueba no disponible en {TEST_DATABASE_URL}")
 
-    from app.embeddings import get_encoder
+    from app import embeddings
     from app.main import app
 
     with psycopg.connect(TEST_DATABASE_URL, autocommit=True) as conn:
         conn.execute("drop table if exists events, sessions, intents, chunks, notes cascade")
 
-    app.dependency_overrides[get_encoder] = TopicEncoder
+    embeddings._encoder = TopicEncoder()
     with TestClient(app) as test_client:
         response = sync(test_client)
         assert response.status_code == 200, response.text
         yield test_client
-    app.dependency_overrides.clear()
+    embeddings._encoder = None

@@ -1,3 +1,5 @@
+from contextlib import asynccontextmanager
+
 import psycopg
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -5,9 +7,19 @@ from fastapi.responses import JSONResponse
 
 from app import db
 from app.config import get_settings
+from app.embeddings import get_encoder
 from app.routes import admin, events, notes, search
 
-app = FastAPI(title="Portfolio search", version="0.1.0")
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    # A local model loads in seconds; do it before the first request, not inside one.
+    if get_settings().embedding_backend == "local":
+        get_encoder()
+    yield
+
+
+app = FastAPI(title="Portfolio search", version="0.1.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
