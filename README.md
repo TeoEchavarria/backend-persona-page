@@ -59,7 +59,7 @@ Postgres, se saltan y corren solo las de chunking y matemática.
 | Método | Ruta | Qué hace |
 | --- | --- | --- |
 | GET | `/health` | Verifica la conexión a la base |
-| POST | `/search` | `{query, session_id?, kind?, use_context?}` → resultados, confianza, contexto, intenciones |
+| POST | `/search` | `{query, session_id?, kind?, since?, order?, use_context?}` → resultados (con el texto resaltado entre ⟦ ⟧), total de candidatos, tiempo, confianza, contexto e intenciones. `kind`: `project`, `skill` o `note`; `since`: año mínimo de publicación; `order`: `relevance` o `date`. |
 | POST | `/events` | `{session_id, kind: read\|select\|finish, chunk_id?, note_slug?}` → estado de la sesión |
 | GET | `/sessions/{id}` | Contexto e intenciones actuales |
 | DELETE | `/sessions/{id}/context` | Quita el contexto |
@@ -90,6 +90,11 @@ dependen del corpus: al agregar notas, conviene volver a correr
 de `eval/queries.yaml` apuntan a las notas actuales, así que hay que
 actualizarlas junto con el contenido. La separación
 actual es estrecha (0,045 frente a 0,047).
+
+**Resaltado.** Cada resultado trae `highlighted`, el párrafo con los términos
+de la consulta marcados por `ts_headline` (con stemming en español, así que
+"proyectos" resalta "proyecto"). Si el resultado llegó solo por significado,
+puede no tener marcas.
 
 **Contexto (Rocchio).** `read` y `select` actualizan `c ← βc + (1−β)e` con
 β = 0,8, y la búsqueda vectorial usa `q_ef = αq + (1−α)c` con α = 0,7. El

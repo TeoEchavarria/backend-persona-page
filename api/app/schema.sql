@@ -3,12 +3,18 @@ create extension if not exists vector;
 create table if not exists notes (
     id serial primary key,
     slug text unique not null,
-    kind text not null check (kind in ('project', 'skill')),
+    kind text not null,
     title text not null,
     tags text[] not null default '{}',
     summary text,
-    link text
+    link text,
+    published date
 );
+
+-- Databases created before notes had a date or the 'note' kind.
+alter table notes add column if not exists published date;
+alter table notes drop constraint if exists notes_kind_check;
+alter table notes add constraint notes_kind_check check (kind in ('project', 'skill', 'note'));
 
 create table if not exists chunks (
     id text primary key,

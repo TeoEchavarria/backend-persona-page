@@ -69,14 +69,16 @@ def hybrid_search(
     query_vector: np.ndarray,
     kind: str | None,
     settings: Settings,
-) -> list[Hit]:
-    by_vector = db.vector_ranking(conn, query_vector, kind, settings.candidate_pool)
-    by_text = db.text_ranking(conn, query, kind, settings.candidate_pool)
+    since: int | None = None,
+) -> tuple[list[Hit], int]:
+    """The best hits, and how many distinct candidates the two rankings produced."""
+    by_vector = db.vector_ranking(conn, query_vector, kind, settings.candidate_pool, since)
+    by_text = db.text_ranking(conn, query, kind, settings.candidate_pool, since)
     vector_ids = [chunk_id for chunk_id, _ in by_vector]
     text_ids = [chunk_id for chunk_id, _ in by_text]
     fused = reciprocal_rank_fusion([vector_ids, text_ids], settings.rrf_k)
     best = sorted(fused, key=fused.get, reverse=True)[: settings.results_limit]
-    return [
+    hits = [
         Hit(
             chunk_id=chunk_id,
             score=fused[chunk_id],
@@ -85,6 +87,7 @@ def hybrid_search(
         )
         for chunk_id in best
     ]
+    return hits, len(fused)
 
 
 def _rank_of(item: str, ranking: list[str]) -> int | None:

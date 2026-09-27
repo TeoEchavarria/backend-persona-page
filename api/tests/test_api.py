@@ -53,13 +53,30 @@ def test_search_returns_paragraph_note_and_score(client):
     body = search(client, "¿cuánto sol necesita el tomate?")
 
     top = body["results"][0]
-    assert top["note"] == {"slug": "jardin", "title": "Jardín", "kind": "project"}
+    assert top["note"] == {"slug": "jardin", "title": "Jardín", "kind": "project", "published": "2025-05-01"}
     assert "tomate" in top["text"]
     assert top["headings"] == ["Plantas"]
     assert top["score"] > 0 and top["vector_rank"] == 1
     assert body["confidence"]["band"] in {"high", "medium", "far"}
     assert body["context"]["applied"] is False
     assert len(body["results"]) <= 5
+    assert body["total"] >= len(body["results"])
+    assert body["took_ms"] >= 0
+
+
+def test_query_terms_are_marked_in_the_text(client):
+    top = search(client, "tomate")["results"][0]
+    assert "⟦tomate⟧" in top["highlighted"]
+    assert top["highlighted"].replace("⟦", "").replace("⟧", "") == top["text"]
+
+
+def test_filter_by_year_and_order_by_date(client):
+    recent = search(client, "plantas pan horno sol", since=2025)
+    assert {r["note"]["slug"] for r in recent["results"]} <= {"jardin", "ejemplo"}
+
+    by_date = search(client, "plantas pan horno sol", order="date")
+    dates = [r["note"]["published"] for r in by_date["results"]]
+    assert dates == sorted(dates, reverse=True)
 
 
 def test_kind_filter(client):

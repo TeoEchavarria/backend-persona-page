@@ -54,7 +54,7 @@ def context_out(
     notes = graph.load_graph(conn, settings)
     if visitor.context is not None and notes is not None:
         closest = notes.notes[int(np.argmax(notes.centroids @ visitor.context))]
-        note = NoteRef(slug=closest["slug"], title=closest["title"], kind=closest["kind"])
+        note = NoteRef(**{key: closest[key] for key in ("slug", "title", "kind", "published")})
     alignment = None
     if visitor.context is not None and query is not None:
         alignment = float(query @ visitor.context)

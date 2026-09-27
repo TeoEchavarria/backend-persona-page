@@ -40,7 +40,7 @@ def related_notes(
     if notes is None or notes.position(slug) is None:
         raise HTTPException(404, "Nota no encontrada")
     return [
-        RelatedNote(slug=note["slug"], title=note["title"], kind=note["kind"], score=score)
+        RelatedNote(**note, score=score)
         for note, score in graph.related(notes, slug, k, settings)
     ]
 

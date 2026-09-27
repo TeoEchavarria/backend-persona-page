@@ -1,3 +1,4 @@
+import datetime as dt
 import hashlib
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -6,7 +7,7 @@ import frontmatter
 from markdown_it import MarkdownIt
 from markdown_it.token import Token
 
-KIND_BY_FOLDER = {"proyectos": "project", "skills": "skill"}
+KIND_BY_FOLDER = {"proyectos": "project", "skills": "skill", "anotaciones": "note"}
 CONTEXT_DEPTH = 2
 
 _markdown = MarkdownIt("commonmark")
@@ -29,6 +30,7 @@ class Note:
     tags: list[str]
     summary: str | None
     link: str | None
+    published: dt.date | None = None
     chunks: list[Chunk] = field(default_factory=list)
 
 
@@ -45,7 +47,7 @@ def parse_note(path: Path) -> Note:
 
 
 def parse_source(slug: str, kind: str, source: str) -> Note:
-    """A markdown file with frontmatter (title, tags, summary, link); frontmatter may override slug and kind."""
+    """A markdown file with frontmatter (title, tags, summary, link, date); frontmatter may override slug and kind."""
     post = frontmatter.loads(source)
     title = post.get("title") or slug
     note = Note(
@@ -55,9 +57,18 @@ def parse_source(slug: str, kind: str, source: str) -> Note:
         tags=list(post.get("tags") or []),
         summary=post.get("summary"),
         link=post.get("link"),
+        published=_as_date(post.get("date")),
     )
     note.chunks = chunk_markdown(post.content, title)
     return note
+
+
+def _as_date(value) -> dt.date | None:
+    if isinstance(value, dt.datetime):
+        return value.date()
+    if isinstance(value, dt.date):
+        return value
+    return dt.date.fromisoformat(str(value)) if value else None
 
 
 def chunk_markdown(markdown: str, title: str) -> list[Chunk]:

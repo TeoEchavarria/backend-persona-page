@@ -1,5 +1,6 @@
 ---
 title: Jardín
+date: 2025-05-01
 ---
 
 ## Plantas

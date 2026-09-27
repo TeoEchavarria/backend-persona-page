@@ -1,3 +1,5 @@
+import datetime as dt
+import time
 from uuid import uuid4
 
 import psycopg
@@ -20,6 +22,7 @@ def run_search(
     encoder: Encoder = Depends(get_encoder),
     settings: Settings = Depends(get_settings),
 ) -> SearchResponse:
+    started = time.perf_counter()
     query = request.query.strip()
     session = visitor.load(conn, request.session_id or uuid4())
     with embedding_errors():
@@ -27,11 +30,14 @@ def run_search(
 
     use_context = request.use_context and session.context is not None
     ranked_by = effective_query(query_vector, session.context if use_context else None, settings.rocchio_alpha)
-    hits = search.hybrid_search(conn, query, ranked_by, request.kind, settings)
+    hits, total = search.hybrid_search(conn, query, ranked_by, request.kind, settings, request.since)
     # Confidence is judged on the literal query: context may reorder results, never make them look closer.
-    stats = db.similarity_stats(conn, query_vector, request.kind)
+    stats = db.similarity_stats(conn, query_vector, request.kind, request.since)
     confidence = search.confidence(stats, settings)
-    rows = db.fetch_chunks(conn, [hit.chunk_id for hit in hits], query_vector)
+    rows = db.fetch_chunks(conn, [hit.chunk_id for hit in hits], query_vector, query)
+    results = [_result(hit, rows[hit.chunk_id]) for hit in hits if hit.chunk_id in rows]
+    if request.order == "date":
+        results.sort(key=lambda result: result.note.published or dt.date.min, reverse=True)
 
     db.insert_event(conn, session.id, "query", query=query)
     visitor.observe(conn, settings, session, query_vector, read=False)
@@ -40,7 +46,7 @@ def run_search(
     return SearchResponse(
         session_id=session.id,
         query=query,
-        results=[_result(hit, rows[hit.chunk_id]) for hit in hits if hit.chunk_id in rows],
+        results=results,
         confidence=ConfidenceOut(
             band=confidence.band,
             message=confidence.message,
@@ -56,6 +62,8 @@ def run_search(
         context=visitor.context_out(conn, settings, session, applied=use_context, query=query_vector),
         intents=visitor.intents_out(conn, settings, session),
         rrf_k=settings.rrf_k,
+        total=total,
+        took_ms=round((time.perf_counter() - started) * 1000),
     )
 
 
@@ -63,8 +71,9 @@ def _result(hit: search.Hit, row: dict) -> SearchResult:
     return SearchResult(
         chunk_id=hit.chunk_id,
         text=row["text"],
+        highlighted=row["highlighted"],
         headings=row["headings"],
-        note=NoteRef(slug=row["slug"], title=row["title"], kind=row["kind"]),
+        note=NoteRef(slug=row["slug"], title=row["title"], kind=row["kind"], published=row["published"]),
         score=hit.score,
         similarity=row["similarity"],
         vector_rank=hit.vector_rank,

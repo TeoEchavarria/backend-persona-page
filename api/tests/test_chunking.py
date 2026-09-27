@@ -1,3 +1,4 @@
+import datetime as dt
 from pathlib import Path
 
 from app.chunking import chunk_id, load_notes, parse_note, with_context
@@ -11,6 +12,7 @@ def test_note_produces_expected_chunks():
     assert note.slug == "ejemplo"
     assert note.kind == "project"
     assert note.tags == ["prueba"]
+    assert note.published == dt.date(2026, 1, 10)
     assert [(c.headings, c.text) for c in note.chunks] == [
         ((), "Párrafo inicial sin sección."),
         (

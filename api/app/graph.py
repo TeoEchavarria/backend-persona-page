@@ -70,7 +70,7 @@ def build_graph(conn: psycopg.Connection, settings: Settings) -> NoteGraph | Non
     rows = db.note_centroids(conn)
     if len(rows) < 2:
         return None
-    notes = [{key: row[key] for key in ("id", "slug", "title", "kind")} for row in rows]
+    notes = [{key: row[key] for key in ("id", "slug", "title", "kind", "published")} for row in rows]
     index = {note["id"]: i for i, note in enumerate(notes)}
     centroids = normalize(np.stack([np.asarray(row["centroid"], dtype=np.float64) for row in rows]))
     prior = markov.semantic_prior(centroids, settings.markov_temperature)

@@ -1,9 +1,10 @@
+import datetime as dt
 from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field
 
-Kind = Literal["project", "skill"]
+Kind = Literal["project", "skill", "note"]
 Band = Literal["high", "medium", "far"]
 
 
@@ -11,18 +12,22 @@ class NoteRef(BaseModel):
     slug: str
     title: str
     kind: Kind
+    published: dt.date | None = None
 
 
 class SearchRequest(BaseModel):
     query: str = Field(min_length=1, max_length=300)
     session_id: UUID | None = None
     kind: Kind | None = None
+    since: int | None = Field(default=None, ge=1990, le=2100)
+    order: Literal["relevance", "date"] = "relevance"
     use_context: bool = True
 
 
 class SearchResult(BaseModel):
     chunk_id: str
     text: str
+    highlighted: str  # text with the query's terms wrapped in ⟦ ⟧
     headings: list[str]
     note: NoteRef
     score: float
@@ -67,6 +72,8 @@ class SearchResponse(BaseModel):
     context: ContextOut
     intents: list[IntentOut]
     rrf_k: int
+    total: int  # distinct candidates across both rankings
+    took_ms: int
 
 
 class EventRequest(BaseModel):

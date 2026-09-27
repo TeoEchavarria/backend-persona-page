@@ -1,6 +1,7 @@
 ---
 title: Proyecto de ejemplo
 tags: [prueba]
+date: 2026-01-10
 ---
 
 Párrafo inicial sin sección.

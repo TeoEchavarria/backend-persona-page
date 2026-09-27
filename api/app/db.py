@@ -55,14 +55,14 @@ def ping(conn: psycopg.Connection) -> bool:
 def upsert_note(conn: psycopg.Connection, note: Note) -> int:
     row = conn.execute(
         """
-        insert into notes (slug, kind, title, tags, summary, link)
-        values (%s, %s, %s, %s, %s, %s)
+        insert into notes (slug, kind, title, tags, summary, link, published)
+        values (%s, %s, %s, %s, %s, %s, %s)
         on conflict (slug) do update
         set kind = excluded.kind, title = excluded.title, tags = excluded.tags,
-            summary = excluded.summary, link = excluded.link
+            summary = excluded.summary, link = excluded.link, published = excluded.published
         returning id
         """,
-        (note.slug, note.kind, note.title, note.tags, note.summary, note.link),
+        (note.slug, note.kind, note.title, note.tags, note.summary, note.link, note.published),
     ).fetchone()
     return row["id"]
 
@@ -117,7 +117,11 @@ def purge_old_sessions(conn: psycopg.Connection, days: int) -> int:
 
 # ── Search ────────────────────────────────────────────────────────────
 
-_KIND_FILTER = "(%(kind)s::text is null or n.kind = %(kind)s)"
+# Filters shared by every search query: note kind and "published since" a year.
+_KIND_FILTER = (
+    "(%(kind)s::text is null or n.kind = %(kind)s)"
+    " and (%(since)s::int is null or extract(year from n.published) >= %(since)s)"
+)
 
 
 @dataclass(frozen=True)
@@ -127,7 +131,9 @@ class SimilarityStats:
     top: list[float]
 
 
-def vector_ranking(conn: psycopg.Connection, vector: np.ndarray, kind: str | None, limit: int) -> list[tuple[str, float]]:
+def vector_ranking(
+    conn: psycopg.Connection, vector: np.ndarray, kind: str | None, limit: int, since: int | None = None
+) -> list[tuple[str, float]]:
     # <#> is the negative inner product; with unit vectors, -(a <#> b) is the cosine.
     rows = conn.execute(
         f"""
@@ -137,12 +143,14 @@ def vector_ranking(conn: psycopg.Connection, vector: np.ndarray, kind: str | Non
         order by c.embedding <#> %(v)s
         limit %(limit)s
         """,
-        {"v": vector, "kind": kind, "limit": limit},
+        {"v": vector, "kind": kind, "limit": limit, "since": since},
     )
     return [(row["id"], row["similarity"]) for row in rows]
 
 
-def similarity_stats(conn: psycopg.Connection, vector: np.ndarray, kind: str | None) -> SimilarityStats:
+def similarity_stats(
+    conn: psycopg.Connection, vector: np.ndarray, kind: str | None, since: int | None = None
+) -> SimilarityStats:
     row = conn.execute(
         f"""
         select avg(s) as mean, coalesce(stddev_pop(s), 0) as std,
@@ -153,39 +161,53 @@ def similarity_stats(conn: psycopg.Connection, vector: np.ndarray, kind: str | N
             where {_KIND_FILTER}
         ) scored
         """,
-        {"v": vector, "kind": kind},
+        {"v": vector, "kind": kind, "since": since},
     ).fetchone()
     return SimilarityStats(row["mean"] or 0.0, row["std"], list(row["top"] or []))
 
 
-def text_ranking(conn: psycopg.Connection, query: str, kind: str | None, limit: int) -> list[tuple[str, float]]:
+def _or_query(config: str) -> str:
     # plainto_tsquery ANDs every word; OR-ing them suits natural-language questions better.
+    return f"nullif(replace(plainto_tsquery('{config}', %(q)s)::text, '&', '|'), '')::tsquery"
+
+
+def text_ranking(
+    conn: psycopg.Connection, query: str, kind: str | None, limit: int, since: int | None = None
+) -> list[tuple[str, float]]:
     config = get_settings().text_search_config
     rows = conn.execute(
         f"""
-        with q as (
-            select nullif(replace(plainto_tsquery('{config}', %(q)s)::text, '&', '|'), '')::tsquery as tsq
-        )
+        with q as (select {_or_query(config)} as tsq)
         select c.id, ts_rank(c.tsv, q.tsq) as rank
         from chunks c join notes n on n.id = c.note_id, q
         where q.tsq is not null and c.tsv @@ q.tsq and {_KIND_FILTER}
         order by rank desc
         limit %(limit)s
         """,
-        {"q": query, "kind": kind, "limit": limit},
+        {"q": query, "kind": kind, "limit": limit, "since": since},
     )
     return [(row["id"], row["rank"]) for row in rows]
 
 
-def fetch_chunks(conn: psycopg.Connection, ids: list[str], vector: np.ndarray) -> dict[str, dict]:
+HIGHLIGHT_START, HIGHLIGHT_END = "\u27e6", "\u27e7"  # ⟦ ⟧: never in the notes, easy to split on
+
+
+def fetch_chunks(conn: psycopg.Connection, ids: list[str], vector: np.ndarray, query: str = "") -> dict[str, dict]:
+    """The chunks with their note, similarity to `vector`, and the text with query terms marked ⟦like this⟧."""
+    config = get_settings().text_search_config
     rows = conn.execute(
-        """
-        select c.id, c.text, c.headings, c.position, -(c.embedding <#> %s) as similarity,
-               n.id as note_id, n.slug, n.title, n.kind
-        from chunks c join notes n on n.id = c.note_id
-        where c.id = any(%s)
+        f"""
+        with q as (select {_or_query(config)} as tsq)
+        select c.id, c.text, c.headings, c.position, -(c.embedding <#> %(v)s) as similarity,
+               case when q.tsq is null then c.text
+                    else ts_headline('{config}', c.text, q.tsq,
+                                     'HighlightAll=true, StartSel={HIGHLIGHT_START}, StopSel={HIGHLIGHT_END}')
+               end as highlighted,
+               n.id as note_id, n.slug, n.title, n.kind, n.published
+        from chunks c join notes n on n.id = c.note_id, q
+        where c.id = any(%(ids)s)
         """,
-        (vector, ids),
+        {"v": vector, "ids": ids, "q": query},
     )
     return {row["id"]: row for row in rows}
 
@@ -199,12 +221,14 @@ def chunk_embedding(conn: psycopg.Connection, chunk_id: str) -> tuple[np.ndarray
 
 
 def list_notes(conn: psycopg.Connection) -> list[dict]:
-    return conn.execute("select id, slug, kind, title, tags, summary, link from notes order by id").fetchall()
+    return conn.execute(
+        "select id, slug, kind, title, tags, summary, link, published from notes order by id"
+    ).fetchall()
 
 
 def get_note(conn: psycopg.Connection, slug: str) -> dict | None:
     return conn.execute(
-        "select id, slug, kind, title, tags, summary, link from notes where slug = %s", (slug,)
+        "select id, slug, kind, title, tags, summary, link, published from notes where slug = %s", (slug,)
     ).fetchone()
 
 
@@ -217,7 +241,7 @@ def note_chunks(conn: psycopg.Connection, note_id: int) -> list[dict]:
 def note_centroids(conn: psycopg.Connection) -> list[dict]:
     rows = conn.execute(
         """
-        select n.id, n.slug, n.kind, n.title, avg(c.embedding) as centroid
+        select n.id, n.slug, n.kind, n.title, n.published, avg(c.embedding) as centroid
         from notes n join chunks c on c.note_id = n.id
         group by n.id order by n.id
         """

@@ -36,7 +36,7 @@ def evaluate() -> list[Outcome]:
     outcomes = []
     with db.connect() as conn:
         for case, vector in zip(cases, vectors):
-            hits = search.hybrid_search(conn, case["query"], vector, None, settings)[:3]
+            hits = search.hybrid_search(conn, case["query"], vector, None, settings)[0][:3]
             rows = db.fetch_chunks(conn, [hit.chunk_id for hit in hits], vector)
             found = any(
                 row["slug"] == case["note"] and case.get("contains", "").lower() in row["text"].lower()
