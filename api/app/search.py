@@ -7,9 +7,16 @@ from app import db
 from app.config import Settings
 
 MESSAGES = {
-    "high": "Esto responde directamente a lo que buscas.",
-    "medium": "Hay coincidencias parciales; puede que no sea exactamente lo que buscas.",
-    "far": "No encontré nada cercano. Estos son los fragmentos menos lejanos.",
+    "es": {
+        "high": "Esto responde directamente a lo que buscas.",
+        "medium": "Hay coincidencias parciales; puede que no sea exactamente lo que buscas.",
+        "far": "No encontré nada cercano. Estos son los fragmentos menos lejanos.",
+    },
+    "en": {
+        "high": "This answers what you are looking for.",
+        "medium": "These are partial matches; they may not be exactly what you are looking for.",
+        "far": "Nothing close came up. These are the least distant paragraphs.",
+    },
 }
 
 
@@ -53,14 +60,15 @@ def confidence_band(margin: float, gap: float, settings: Settings) -> str:
     return "far"
 
 
-def confidence(stats: db.SimilarityStats, settings: Settings) -> Confidence:
+def confidence(stats: db.SimilarityStats, settings: Settings, lang: str = "es") -> Confidence:
+    messages = MESSAGES.get(lang, MESSAGES["es"])
     if not stats.top:
-        return Confidence("far", 0.0, 0.0, 0.0, 0.0, MESSAGES["far"])
+        return Confidence("far", 0.0, 0.0, 0.0, 0.0, messages["far"])
     top = stats.top[0]
     gap = top - stats.top[1] if len(stats.top) > 1 else 0.0
     margin = top - stats.mean
     band = confidence_band(margin, gap, settings)
-    return Confidence(band, margin, z_score(top, stats.mean, stats.std), gap, top, MESSAGES[band])
+    return Confidence(band, margin, z_score(top, stats.mean, stats.std), gap, top, messages[band])
 
 
 def hybrid_search(
@@ -70,10 +78,11 @@ def hybrid_search(
     kind: str | None,
     settings: Settings,
     since: int | None = None,
+    lang: str = "es",
 ) -> tuple[list[Hit], int]:
     """The best hits, and how many distinct candidates the two rankings produced."""
-    by_vector = db.vector_ranking(conn, query_vector, kind, settings.candidate_pool, since)
-    by_text = db.text_ranking(conn, query, kind, settings.candidate_pool, since)
+    by_vector = db.vector_ranking(conn, query_vector, kind, settings.candidate_pool, since, lang)
+    by_text = db.text_ranking(conn, query, kind, settings.candidate_pool, since, lang)
     vector_ids = [chunk_id for chunk_id, _ in by_vector]
     text_ids = [chunk_id for chunk_id, _ in by_text]
     fused = reciprocal_rank_fusion([vector_ids, text_ids], settings.rrf_k)

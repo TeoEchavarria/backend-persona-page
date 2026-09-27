@@ -16,7 +16,7 @@ CACHE_SECONDS = 60
 @dataclass
 class NoteGraph:
     notes: list[dict]
-    index: dict[int, int]
+    index: dict[str, int]
     centroids: np.ndarray
     prior: np.ndarray
     counts: np.ndarray
@@ -58,23 +58,24 @@ def _cached(key: str, build):
     return value
 
 
-def load_graph(conn: psycopg.Connection, settings: Settings) -> NoteGraph | None:
-    return _cached("graph", lambda: build_graph(conn, settings))
+def load_graph(conn: psycopg.Connection, settings: Settings, lang: str = "es") -> NoteGraph | None:
+    return _cached(f"graph:{lang}", lambda: build_graph(conn, settings, lang))
 
 
-def load_intents(conn: psycopg.Connection, settings: Settings) -> Intents | None:
-    return _cached("intents", lambda: build_intents(conn, settings))
+def load_intents(conn: psycopg.Connection, settings: Settings, lang: str = "es") -> Intents | None:
+    return _cached(f"intents:{lang}", lambda: build_intents(conn, settings, lang))
 
 
-def build_graph(conn: psycopg.Connection, settings: Settings) -> NoteGraph | None:
-    rows = db.note_centroids(conn)
+def build_graph(conn: psycopg.Connection, settings: Settings, lang: str = "es") -> NoteGraph | None:
+    """One graph per language; transitions are counted by slug, so both languages feed both graphs."""
+    rows = db.note_centroids(conn, lang)
     if len(rows) < 2:
         return None
     notes = [{key: row[key] for key in ("id", "slug", "title", "kind", "published")} for row in rows]
-    index = {note["id"]: i for i, note in enumerate(notes)}
+    index = {note["slug"]: i for i, note in enumerate(notes)}
     centroids = normalize(np.stack([np.asarray(row["centroid"], dtype=np.float64) for row in rows]))
     prior = markov.semantic_prior(centroids, settings.markov_temperature)
-    visits = [(row["session_id"], row["kind"], row["note_id"]) for row in db.note_visits(conn)]
+    visits = [(row["session_id"], row["kind"], row["slug"]) for row in db.note_visits(conn)]
     counts = markov.transition_counts(visits, index, settings.finished_weight)
     transitions = markov.transition_matrix(counts, prior, settings.markov_lambda)
     return NoteGraph(
@@ -88,12 +89,12 @@ def build_graph(conn: psycopg.Connection, settings: Settings) -> NoteGraph | Non
     )
 
 
-def build_intents(conn: psycopg.Connection, settings: Settings) -> Intents | None:
+def build_intents(conn: psycopg.Connection, settings: Settings, lang: str = "es") -> Intents | None:
     centroid_by_slug = {
-        row["slug"]: np.asarray(row["centroid"], dtype=np.float64) for row in db.note_centroids(conn)
+        row["slug"]: np.asarray(row["centroid"], dtype=np.float64) for row in db.note_centroids(conn, lang)
     }
     ids, labels, centroids = [], [], []
-    for row in db.list_intents(conn):
+    for row in db.list_intents(conn, lang):
         members = [centroid_by_slug[slug] for slug in row["note_slugs"] if slug in centroid_by_slug]
         if members:
             ids.append(row["id"])

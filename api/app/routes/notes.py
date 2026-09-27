@@ -3,26 +3,27 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app import db, graph
 from app.config import Settings, get_settings
-from app.schemas import ChunkOut, GraphEdge, GraphNode, GraphOut, NoteOut, NoteSummary, RelatedNote
+from app.schemas import ChunkOut, GraphEdge, GraphNode, GraphOut, Lang, NoteOut, NoteSummary, RelatedNote
 
 router = APIRouter()
 
 
 @router.get("/notes", response_model=list[NoteSummary])
 def list_notes(
+    lang: Lang = "es",
     conn: psycopg.Connection = Depends(db.get_connection),
     settings: Settings = Depends(get_settings),
 ) -> list[NoteSummary]:
     """Every note, most central first (global PageRank over the transition graph)."""
-    notes = graph.load_graph(conn, settings)
+    notes = graph.load_graph(conn, settings, lang)
     centrality = {} if notes is None else {n["slug"]: float(p) for n, p in zip(notes.notes, notes.pagerank)}
-    summaries = [NoteSummary(**row, centrality=centrality.get(row["slug"])) for row in db.list_notes(conn)]
+    summaries = [NoteSummary(**row, centrality=centrality.get(row["slug"])) for row in db.list_notes(conn, lang)]
     return sorted(summaries, key=lambda note: note.centrality or 0.0, reverse=True)
 
 
 @router.get("/notes/{slug}", response_model=NoteOut)
-def get_note(slug: str, conn: psycopg.Connection = Depends(db.get_connection)) -> NoteOut:
-    note = db.get_note(conn, slug)
+def get_note(slug: str, lang: Lang = "es", conn: psycopg.Connection = Depends(db.get_connection)) -> NoteOut:
+    note = db.get_note(conn, slug, lang)
     if note is None:
         raise HTTPException(404, "Nota no encontrada")
     chunks = [ChunkOut(**row) for row in db.note_chunks(conn, note["id"])]
@@ -33,10 +34,11 @@ def get_note(slug: str, conn: psycopg.Connection = Depends(db.get_connection)) -
 def related_notes(
     slug: str,
     k: int = Query(3, ge=1, le=10),
+    lang: Lang = "es",
     conn: psycopg.Connection = Depends(db.get_connection),
     settings: Settings = Depends(get_settings),
 ) -> list[RelatedNote]:
-    notes = graph.load_graph(conn, settings)
+    notes = graph.load_graph(conn, settings, lang)
     if notes is None or notes.position(slug) is None:
         raise HTTPException(404, "Nota no encontrada")
     return [
@@ -47,10 +49,11 @@ def related_notes(
 
 @router.get("/graph", response_model=GraphOut)
 def note_graph(
+    lang: Lang = "es",
     conn: psycopg.Connection = Depends(db.get_connection),
     settings: Settings = Depends(get_settings),
 ) -> GraphOut:
-    notes = graph.load_graph(conn, settings)
+    notes = graph.load_graph(conn, settings, lang)
     nodes, edges = [], []
     if notes is not None:
         nodes = [GraphNode(**note, pagerank=float(p)) for note, p in zip(notes.notes, notes.pagerank)]

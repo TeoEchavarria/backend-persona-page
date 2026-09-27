@@ -1,11 +1,13 @@
 """Run eval/queries.yaml against the indexed content: top-3 accuracy and confidence bands.
 
-    uv run python -m scripts.calibrate
+    uv run python -m scripts.calibrate            # Spanish content, eval/queries.yaml
+    uv run python -m scripts.calibrate --lang en  # English content, eval/queries.en.yaml
 
 Prints each query's margin (best − mean similarity), z-score and gap, then the thresholds that best separate
 answerable queries (not "far") from unanswerable ones ("far"). Copy them to .env.
 """
 
+import argparse
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -16,7 +18,7 @@ from app import db, search
 from app.config import get_settings
 from app.embeddings import get_encoder
 
-QUERIES = Path(__file__).resolve().parents[1] / "eval" / "queries.yaml"
+EVAL = Path(__file__).resolve().parents[1] / "eval"
 
 
 @dataclass
@@ -29,20 +31,20 @@ class Outcome:
     gap: float
 
 
-def evaluate() -> list[Outcome]:
+def evaluate(lang: str) -> list[Outcome]:
     settings = get_settings()
-    cases = yaml.safe_load(QUERIES.read_text())
+    cases = yaml.safe_load((EVAL / ("queries.yaml" if lang == "es" else f"queries.{lang}.yaml")).read_text())
     vectors = get_encoder().encode_queries([case["query"] for case in cases])
     outcomes = []
     with db.connect() as conn:
         for case, vector in zip(cases, vectors):
-            hits = search.hybrid_search(conn, case["query"], vector, None, settings)[0][:3]
+            hits = search.hybrid_search(conn, case["query"], vector, None, settings, lang=lang)[0][:3]
             rows = db.fetch_chunks(conn, [hit.chunk_id for hit in hits], vector)
             found = any(
                 row["slug"] == case["note"] and case.get("contains", "").lower() in row["text"].lower()
                 for row in rows.values()
             )
-            confidence = search.confidence(db.similarity_stats(conn, vector, None), settings)
+            confidence = search.confidence(db.similarity_stats(conn, vector, None, lang=lang), settings, lang)
             outcomes.append(Outcome(case["query"], case["note"] is not None, found, confidence.margin, confidence.z, confidence.gap))
     return outcomes
 
@@ -65,9 +67,9 @@ def best_thresholds(outcomes: list[Outcome]) -> tuple[float, float, float]:
     return round(margin_medium, 3), round(margin_high, 3), round(gap_high, 3)
 
 
-def main() -> None:
+def main(lang: str) -> None:
     settings = get_settings()
-    outcomes = evaluate()
+    outcomes = evaluate(lang)
     for o in outcomes:
         band = search.confidence_band(o.margin, o.gap, settings)
         mark = "·" if not o.answerable else ("✓" if o.found else "✗")
@@ -85,4 +87,6 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--lang", default="es", choices=["es", "en"])
+    main(parser.parse_args().lang)

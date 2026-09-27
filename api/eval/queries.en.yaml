@@ -1,0 +1,101 @@
+# English queries against the English notes, with the same idea as queries.yaml:
+# expected note + a piece of the paragraph, and some with no answer (note: null).
+- query: how are the newspaper paragraphs grouped?
+  note: mismo-hecho-otras-palabras
+  contains: HDBSCAN
+- query: what do outlets share when they cover the same story
+  note: mismo-hecho-otras-palabras
+  contains: separates what the outlets share
+- query: multilingual embedding model for news
+  note: mismo-hecho-otras-palabras
+  contains: BGE-M3
+- query: when does a group become a flag
+  note: mismo-hecho-otras-palabras
+  contains: flag
+- query: clustering news with embeddings
+  note: mismo-hecho-otras-palabras
+  contains: ""
+- query: an app without internet permission
+  note: fime
+  contains: android.permission.INTERNET
+- query: amortization table for installment purchases
+  note: fime
+  contains: amortization
+- query: import a password-protected PDF statement
+  note: fime
+  contains: imports your statement
+- query: why are there two versions of the android app
+  note: fime
+  contains: READ_SMS
+- query: simulate paying extra on my credit card
+  note: fime
+  contains: simulator
+- query: privacy of the data on the phone
+  note: fime
+  contains: ""
+- query: predict brain activity from a video
+  note: tribe
+  contains: predicts brain activation
+- query: why does the peak show up seconds after the scene
+  note: tribe
+  contains: natural lag
+- query: brain encoding model deep learning
+  note: tribe
+  contains: Tribe v2
+- query: experience with pytorch
+  note: tribe
+  contains: PyTorch
+- query: how are vector search and text search combined
+  note: este-portafolio
+  contains: Reciprocal Rank Fusion
+- query: what happens if no result answers the question
+  note: este-portafolio
+  contains: the interface says so
+- query: how does what I already read change the search
+  note: este-portafolio
+  contains: Rocchio
+- query: recommendations with markov chains
+  note: este-portafolio
+  contains: Dirichlet prior
+- query: how does search work in this portfolio?
+  note: este-portafolio
+  contains: ""
+- query: forecasting experience in production
+  note: estadistica-y-probabilidad
+  contains: forecasting
+- query: statistics background
+  note: estadistica-y-probabilidad
+  contains: three years
+- query: semantic search experience
+  note: embeddings-y-busqueda-semantica
+  contains: ""
+- query: LLM integration and retrieval
+  note: embeddings-y-busqueda-semantica
+  contains: language models
+- query: how do you evaluate search quality
+  note: embeddings-y-busqueda-semantica
+  contains: test queries
+- query: what machine learning models have you built?
+  note: tribe
+  contains: ""
+# No answer in the content
+- query: cheese arepa recipe
+  note: null
+- query: last night's football score
+  note: null
+- query: store opening hours
+  note: null
+- query: best hiking trails in the alps
+  note: null
+- query: how to fix a bike tyre
+  note: null
+- query: dollar exchange rate today
+  note: null
+- query: best restaurant in medellín
+  note: null
+- query: how to file a tax return
+  note: null
+- query: weather in bogotá tomorrow
+  note: null
+- query: how to bake sourdough bread
+  note: null

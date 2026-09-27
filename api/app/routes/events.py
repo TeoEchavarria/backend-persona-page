@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from app import db, visitor
 from app.config import Settings, get_settings
-from app.schemas import EventRequest, SessionState
+from app.schemas import EventRequest, Lang, SessionState
 
 router = APIRouter()
 
@@ -16,8 +16,8 @@ def record_event(
     conn: psycopg.Connection = Depends(db.get_connection),
     settings: Settings = Depends(get_settings),
 ) -> SessionState:
-    session = visitor.load(conn, event.session_id)
-    note_id = db.note_id_for_slug(conn, event.note_slug) if event.note_slug else None
+    session = visitor.load(conn, event.session_id, event.lang)
+    note_id = db.note_id_for_slug(conn, event.note_slug, event.lang) if event.note_slug else None
 
     if event.chunk_id:
         found = db.chunk_embedding(conn, event.chunk_id)
@@ -37,19 +37,21 @@ def record_event(
 @router.get("/sessions/{session_id}", response_model=SessionState)
 def session_state(
     session_id: UUID,
+    lang: Lang = "es",
     conn: psycopg.Connection = Depends(db.get_connection),
     settings: Settings = Depends(get_settings),
 ) -> SessionState:
-    return visitor.state(conn, settings, visitor.load(conn, session_id))
+    return visitor.state(conn, settings, visitor.load(conn, session_id, lang))
 
 
 @router.delete("/sessions/{session_id}/context", response_model=SessionState)
 def clear_context(
     session_id: UUID,
+    lang: Lang = "es",
     conn: psycopg.Connection = Depends(db.get_connection),
     settings: Settings = Depends(get_settings),
 ) -> SessionState:
-    session = visitor.load(conn, session_id)
+    session = visitor.load(conn, session_id, lang)
     session.context = None
     visitor.save(conn, session)
     return visitor.state(conn, settings, session)

@@ -31,6 +31,7 @@ class Note:
     summary: str | None
     link: str | None
     published: dt.date | None = None
+    lang: str = "es"
     chunks: list[Chunk] = field(default_factory=list)
 
 
@@ -46,7 +47,7 @@ def parse_note(path: Path) -> Note:
     return parse_source(path.stem, KIND_BY_FOLDER[path.parent.name], path.read_text())
 
 
-def parse_source(slug: str, kind: str, source: str) -> Note:
+def parse_source(slug: str, kind: str, source: str, lang: str = "es") -> Note:
     """A markdown file with frontmatter (title, tags, summary, link, date); frontmatter may override slug and kind."""
     post = frontmatter.loads(source)
     title = post.get("title") or slug
@@ -58,8 +59,9 @@ def parse_source(slug: str, kind: str, source: str) -> Note:
         summary=post.get("summary"),
         link=post.get("link"),
         published=_as_date(post.get("date")),
+        lang=lang,
     )
-    note.chunks = chunk_markdown(post.content, title)
+    note.chunks = chunk_markdown(post.content, title, lang)
     return note
 
 
@@ -71,7 +73,7 @@ def _as_date(value) -> dt.date | None:
     return dt.date.fromisoformat(str(value)) if value else None
 
 
-def chunk_markdown(markdown: str, title: str) -> list[Chunk]:
+def chunk_markdown(markdown: str, title: str, lang: str = "es") -> list[Chunk]:
     chunks: list[Chunk] = []
     headings: list[tuple[int, str]] = []
     tokens = _markdown.parse(markdown)
@@ -88,7 +90,7 @@ def chunk_markdown(markdown: str, title: str) -> list[Chunk]:
             text = _plain_text(tokens[i:end]).strip()
             if text:
                 path = tuple(h[1] for h in headings)
-                chunks.append(_make_chunk(len(chunks), title, path, text))
+                chunks.append(_make_chunk(len(chunks), title, path, text, lang))
             i = end
             continue
         i += 1
@@ -100,13 +102,14 @@ def with_context(title: str, headings: tuple[str, ...], text: str) -> str:
     return " > ".join([title, *headings[-CONTEXT_DEPTH:], text])
 
 
-def chunk_id(text_with_context: str) -> str:
-    return hashlib.sha256(text_with_context.encode()).hexdigest()[:20]
+def chunk_id(text_with_context: str, lang: str = "es") -> str:
+    """Stable id: a hash of the contextual text and its language (a paragraph can read the same in both)."""
+    return hashlib.sha256(f"{lang}:{text_with_context}".encode()).hexdigest()[:20]
 
 
-def _make_chunk(position: int, title: str, headings: tuple[str, ...], text: str) -> Chunk:
+def _make_chunk(position: int, title: str, headings: tuple[str, ...], text: str, lang: str) -> Chunk:
     contextual = with_context(title, headings, text)
-    return Chunk(chunk_id(contextual), position, headings, text, contextual)
+    return Chunk(chunk_id(contextual, lang), position, headings, text, contextual)
 
 
 def _skip_block(tokens: list[Token], start: int) -> int:

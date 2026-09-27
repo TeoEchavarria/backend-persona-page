@@ -17,13 +17,14 @@ class Visitor:
     id: UUID
     context: np.ndarray | None
     belief: np.ndarray | None
+    lang: str = "es"  # the language the visitor is reading in: picks the note graph and intent labels
 
 
-def load(conn: psycopg.Connection, session_id: UUID) -> Visitor:
+def load(conn: psycopg.Connection, session_id: UUID, lang: str = "es") -> Visitor:
     row = db.get_or_create_session(conn, session_id)
     context = None if row["context"] is None else np.asarray(row["context"], dtype=np.float32)
     belief = None if row["intent_belief"] is None else np.asarray(row["intent_belief"])
-    return Visitor(session_id, context, belief)
+    return Visitor(session_id, context, belief, lang)
 
 
 def save(conn: psycopg.Connection, visitor: Visitor) -> None:
@@ -35,7 +36,7 @@ def observe(conn: psycopg.Connection, settings: Settings, visitor: Visitor, vect
     """Every observation updates the intent belief; only reading moves the context."""
     if read:
         visitor.context = update_context(visitor.context, vector, settings.rocchio_beta)
-    intents = graph.load_intents(conn, settings)
+    intents = graph.load_intents(conn, settings, visitor.lang)
     if intents is not None:
         belief = visitor.belief if visitor.belief is not None and len(visitor.belief) == len(intents.ids) else None
         visitor.belief = intent.forward_step(
@@ -51,7 +52,7 @@ def context_out(
     query: np.ndarray | None = None,
 ) -> ContextOut:
     note = None
-    notes = graph.load_graph(conn, settings)
+    notes = graph.load_graph(conn, settings, visitor.lang)
     if visitor.context is not None and notes is not None:
         closest = notes.notes[int(np.argmax(notes.centroids @ visitor.context))]
         note = NoteRef(**{key: closest[key] for key in ("slug", "title", "kind", "published")})
@@ -69,7 +70,7 @@ def context_out(
 
 
 def intents_out(conn: psycopg.Connection, settings: Settings, visitor: Visitor) -> list[IntentOut]:
-    intents = graph.load_intents(conn, settings)
+    intents = graph.load_intents(conn, settings, visitor.lang)
     if intents is None:
         return []
     belief = visitor.belief if visitor.belief is not None and len(visitor.belief) == len(intents.ids) else None

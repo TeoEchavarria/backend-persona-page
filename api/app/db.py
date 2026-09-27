@@ -55,14 +55,14 @@ def ping(conn: psycopg.Connection) -> bool:
 def upsert_note(conn: psycopg.Connection, note: Note) -> int:
     row = conn.execute(
         """
-        insert into notes (slug, kind, title, tags, summary, link, published)
-        values (%s, %s, %s, %s, %s, %s, %s)
-        on conflict (slug) do update
+        insert into notes (slug, lang, kind, title, tags, summary, link, published)
+        values (%s, %s, %s, %s, %s, %s, %s, %s)
+        on conflict (slug, lang) do update
         set kind = excluded.kind, title = excluded.title, tags = excluded.tags,
             summary = excluded.summary, link = excluded.link, published = excluded.published
         returning id
         """,
-        (note.slug, note.kind, note.title, note.tags, note.summary, note.link, note.published),
+        (note.slug, note.lang, note.kind, note.title, note.tags, note.summary, note.link, note.published),
     ).fetchone()
     return row["id"]
 
@@ -95,8 +95,10 @@ def delete_chunks_except(conn: psycopg.Connection, keep: set[str]) -> int:
     return conn.execute("delete from chunks where not (id = any(%s))", (list(keep),)).rowcount
 
 
-def delete_notes_except(conn: psycopg.Connection, slugs: set[str]) -> int:
-    return conn.execute("delete from notes where not (slug = any(%s))", (list(slugs),)).rowcount
+def delete_notes_except(conn: psycopg.Connection, keep: set[tuple[str, str]]) -> int:
+    """Delete every note whose (slug, lang) is not in `keep`."""
+    keys = [f"{slug}:{lang}" for slug, lang in keep]
+    return conn.execute("delete from notes where not (slug || ':' || lang = any(%s))", (keys,)).rowcount
 
 
 def replace_intents(conn: psycopg.Connection, intents: list[dict]) -> None:
@@ -104,8 +106,18 @@ def replace_intents(conn: psycopg.Connection, intents: list[dict]) -> None:
         conn.execute("delete from intents")
         for position, intent in enumerate(intents):
             conn.execute(
-                "insert into intents (id, position, label, description, note_slugs) values (%s, %s, %s, %s, %s)",
-                (intent["id"], position, intent["label"], intent.get("description", ""), intent.get("notes", [])),
+                """
+                insert into intents (id, lang, position, label, description, note_slugs)
+                values (%s, %s, %s, %s, %s, %s)
+                """,
+                (
+                    intent["id"],
+                    intent.get("lang", "es"),
+                    position,
+                    intent["label"],
+                    intent.get("description", ""),
+                    intent.get("notes", []),
+                ),
             )
 
 
@@ -117,9 +129,10 @@ def purge_old_sessions(conn: psycopg.Connection, days: int) -> int:
 
 # ── Search ────────────────────────────────────────────────────────────
 
-# Filters shared by every search query: note kind and "published since" a year.
+# Filters shared by every search query: language, note kind and "published since" a year.
 _KIND_FILTER = (
-    "(%(kind)s::text is null or n.kind = %(kind)s)"
+    "n.lang = %(lang)s"
+    " and (%(kind)s::text is null or n.kind = %(kind)s)"
     " and (%(since)s::int is null or extract(year from n.published) >= %(since)s)"
 )
 
@@ -132,7 +145,12 @@ class SimilarityStats:
 
 
 def vector_ranking(
-    conn: psycopg.Connection, vector: np.ndarray, kind: str | None, limit: int, since: int | None = None
+    conn: psycopg.Connection,
+    vector: np.ndarray,
+    kind: str | None,
+    limit: int,
+    since: int | None = None,
+    lang: str = "es",
 ) -> list[tuple[str, float]]:
     # <#> is the negative inner product; with unit vectors, -(a <#> b) is the cosine.
     rows = conn.execute(
@@ -143,13 +161,13 @@ def vector_ranking(
         order by c.embedding <#> %(v)s
         limit %(limit)s
         """,
-        {"v": vector, "kind": kind, "limit": limit, "since": since},
+        {"v": vector, "kind": kind, "limit": limit, "since": since, "lang": lang},
     )
     return [(row["id"], row["similarity"]) for row in rows]
 
 
 def similarity_stats(
-    conn: psycopg.Connection, vector: np.ndarray, kind: str | None, since: int | None = None
+    conn: psycopg.Connection, vector: np.ndarray, kind: str | None, since: int | None = None, lang: str = "es"
 ) -> SimilarityStats:
     row = conn.execute(
         f"""
@@ -161,7 +179,7 @@ def similarity_stats(
             where {_KIND_FILTER}
         ) scored
         """,
-        {"v": vector, "kind": kind, "since": since},
+        {"v": vector, "kind": kind, "since": since, "lang": lang},
     ).fetchone()
     return SimilarityStats(row["mean"] or 0.0, row["std"], list(row["top"] or []))
 
@@ -172,7 +190,12 @@ def _or_query(config: str) -> str:
 
 
 def text_ranking(
-    conn: psycopg.Connection, query: str, kind: str | None, limit: int, since: int | None = None
+    conn: psycopg.Connection,
+    query: str,
+    kind: str | None,
+    limit: int,
+    since: int | None = None,
+    lang: str = "es",
 ) -> list[tuple[str, float]]:
     config = get_settings().text_search_config
     rows = conn.execute(
@@ -184,7 +207,7 @@ def text_ranking(
         order by rank desc
         limit %(limit)s
         """,
-        {"q": query, "kind": kind, "limit": limit, "since": since},
+        {"q": query, "kind": kind, "limit": limit, "since": since, "lang": lang},
     )
     return [(row["id"], row["rank"]) for row in rows]
 
@@ -220,15 +243,16 @@ def chunk_embedding(conn: psycopg.Connection, chunk_id: str) -> tuple[np.ndarray
 # ── Notes ─────────────────────────────────────────────────────────────
 
 
-def list_notes(conn: psycopg.Connection) -> list[dict]:
-    return conn.execute(
-        "select id, slug, kind, title, tags, summary, link, published from notes order by id"
-    ).fetchall()
+_NOTE_COLUMNS = "id, slug, lang, kind, title, tags, summary, link, published"
 
 
-def get_note(conn: psycopg.Connection, slug: str) -> dict | None:
+def list_notes(conn: psycopg.Connection, lang: str = "es") -> list[dict]:
+    return conn.execute(f"select {_NOTE_COLUMNS} from notes where lang = %s order by id", (lang,)).fetchall()
+
+
+def get_note(conn: psycopg.Connection, slug: str, lang: str = "es") -> dict | None:
     return conn.execute(
-        "select id, slug, kind, title, tags, summary, link, published from notes where slug = %s", (slug,)
+        f"select {_NOTE_COLUMNS} from notes where slug = %s and lang = %s", (slug, lang)
     ).fetchone()
 
 
@@ -238,24 +262,28 @@ def note_chunks(conn: psycopg.Connection, note_id: int) -> list[dict]:
     ).fetchall()
 
 
-def note_centroids(conn: psycopg.Connection) -> list[dict]:
+def note_centroids(conn: psycopg.Connection, lang: str = "es") -> list[dict]:
     rows = conn.execute(
         """
         select n.id, n.slug, n.kind, n.title, n.published, avg(c.embedding) as centroid
         from notes n join chunks c on c.note_id = n.id
+        where n.lang = %s
         group by n.id order by n.id
-        """
+        """,
+        (lang,),
     ).fetchall()
     return [{**row, "centroid": as_array(row["centroid"])} for row in rows]
 
 
-def note_id_for_slug(conn: psycopg.Connection, slug: str) -> int | None:
-    row = conn.execute("select id from notes where slug = %s", (slug,)).fetchone()
+def note_id_for_slug(conn: psycopg.Connection, slug: str, lang: str = "es") -> int | None:
+    row = conn.execute("select id from notes where slug = %s and lang = %s", (slug, lang)).fetchone()
     return row["id"] if row else None
 
 
-def list_intents(conn: psycopg.Connection) -> list[dict]:
-    return conn.execute("select id, label, description, note_slugs from intents order by position").fetchall()
+def list_intents(conn: psycopg.Connection, lang: str = "es") -> list[dict]:
+    return conn.execute(
+        "select id, label, description, note_slugs from intents where lang = %s order by position", (lang,)
+    ).fetchall()
 
 
 # ── Sessions and events ───────────────────────────────────────────────
@@ -291,11 +319,12 @@ def insert_event(
 
 
 def note_visits(conn: psycopg.Connection) -> list[dict]:
-    """Every note-level event, grouped by session in time order: the raw material for transition counts."""
+    """Every note-level event, grouped by session in time order: the raw material for transition counts.
+    Visits are keyed by slug, so reading a note in either language counts towards the same node."""
     return conn.execute(
         """
-        select session_id, kind, note_id from events
-        where note_id is not null and kind in ('read', 'select', 'finish')
-        order by session_id, created_at, id
+        select e.session_id, e.kind, n.slug from events e join notes n on n.id = e.note_id
+        where e.kind in ('read', 'select', 'finish')
+        order by e.session_id, e.created_at, e.id
         """
     ).fetchall()

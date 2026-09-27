@@ -24,16 +24,16 @@ def run_search(
 ) -> SearchResponse:
     started = time.perf_counter()
     query = request.query.strip()
-    session = visitor.load(conn, request.session_id or uuid4())
+    session = visitor.load(conn, request.session_id or uuid4(), request.lang)
     with embedding_errors():
         query_vector = encoder.encode_queries([query])[0]
 
     use_context = request.use_context and session.context is not None
     ranked_by = effective_query(query_vector, session.context if use_context else None, settings.rocchio_alpha)
-    hits, total = search.hybrid_search(conn, query, ranked_by, request.kind, settings, request.since)
+    hits, total = search.hybrid_search(conn, query, ranked_by, request.kind, settings, request.since, request.lang)
     # Confidence is judged on the literal query: context may reorder results, never make them look closer.
-    stats = db.similarity_stats(conn, query_vector, request.kind, request.since)
-    confidence = search.confidence(stats, settings)
+    stats = db.similarity_stats(conn, query_vector, request.kind, request.since, request.lang)
+    confidence = search.confidence(stats, settings, request.lang)
     rows = db.fetch_chunks(conn, [hit.chunk_id for hit in hits], query_vector, query)
     results = [_result(hit, rows[hit.chunk_id]) for hit in hits if hit.chunk_id in rows]
     if request.order == "date":

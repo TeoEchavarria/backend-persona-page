@@ -22,10 +22,10 @@ def require_admin(authorization: str = Header(default=""), settings: Settings = 
 @router.put("/content", response_model=SyncResult, dependencies=[Depends(require_admin)])
 def sync_content(content: ContentSync, encoder: Encoder = Depends(get_encoder)) -> SyncResult:
     """Replace the whole content with what the frontend sends. Only new or edited paragraphs are embedded."""
-    notes = [parse_source(note.slug, note.kind, note.source) for note in content.notes]
-    slugs = [note.slug for note in notes]
-    if len(slugs) != len(set(slugs)):
-        raise HTTPException(422, "Hay notas con el mismo slug")
+    notes = [parse_source(note.slug, note.kind, note.source, note.lang) for note in content.notes]
+    keys = [(note.slug, note.lang) for note in notes]
+    if len(keys) != len(set(keys)):
+        raise HTTPException(422, "Hay notas con el mismo slug en el mismo idioma")
     intents = [intent.model_dump() for intent in content.intents]
 
     # The first sync against an empty database creates the schema (and the vector extension).

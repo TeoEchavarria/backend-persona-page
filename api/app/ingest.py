@@ -25,13 +25,13 @@ def sync(conn: psycopg.Connection, encoder: Encoder, notes: list[Note], intents:
     embeddings = encoder.encode_passages([chunk.text_with_context for _, chunk in pending]) if pending else []
 
     with conn.transaction():
-        note_ids = {note.slug: db.upsert_note(conn, note) for note in notes}
+        note_ids = {(note.slug, note.lang): db.upsert_note(conn, note) for note in notes}
         for note in notes:
             for chunk in note.chunks:
                 if chunk.id in known:
-                    db.update_position(conn, note_ids[note.slug], chunk)
+                    db.update_position(conn, note_ids[note.slug, note.lang], chunk)
         for (note, chunk), embedding in zip(pending, embeddings):
-            db.insert_chunk(conn, note_ids[note.slug], chunk, embedding)
+            db.insert_chunk(conn, note_ids[note.slug, note.lang], chunk, embedding)
         removed_chunks = db.delete_chunks_except(conn, {chunk.id for note in notes for chunk in note.chunks})
         removed_notes = db.delete_notes_except(conn, set(note_ids))
         db.replace_intents(conn, intents)

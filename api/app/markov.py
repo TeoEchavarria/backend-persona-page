@@ -23,7 +23,7 @@ def semantic_prior(centroids: np.ndarray, temperature: float) -> np.ndarray:
 
 
 def transition_counts(
-    visits: Iterable[tuple[object, str, int]], index: dict[int, int], finished_weight: float
+    visits: Iterable[tuple[object, str, object]], index: dict, finished_weight: float
 ) -> np.ndarray:
     """Count note-to-note moves per session; leaving a note read to the end counts `finished_weight`."""
     counts = np.zeros((len(index), len(index)))
@@ -74,14 +74,14 @@ def maximal_marginal_relevance(
     return chosen
 
 
-def _session_paths(visits: Iterable[tuple[object, str, int]], index: dict[int, int]) -> list[list[tuple[int, bool]]]:
+def _session_paths(visits: Iterable[tuple[object, str, object]], index: dict) -> list[list[tuple[int, bool]]]:
     """Collapse each session's events into [(note, finished)], one entry per consecutive visit."""
     paths: dict[object, list[list]] = {}
-    for session, kind, note_id in visits:
-        if note_id not in index:
+    for session, kind, note in visits:
+        if note not in index:
             continue
         path = paths.setdefault(session, [])
-        node = index[note_id]
+        node = index[note]
         if not path or path[-1][0] != node:
             path.append([node, False])
         if kind == "finish":

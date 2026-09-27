@@ -5,6 +5,7 @@ from uuid import UUID
 from pydantic import BaseModel, Field
 
 Kind = Literal["project", "skill", "note"]
+Lang = Literal["es", "en"]
 Band = Literal["high", "medium", "far"]
 
 
@@ -21,6 +22,7 @@ class SearchRequest(BaseModel):
     kind: Kind | None = None
     since: int | None = Field(default=None, ge=1990, le=2100)
     order: Literal["relevance", "date"] = "relevance"
+    lang: Lang = "es"
     use_context: bool = True
 
 
@@ -81,6 +83,7 @@ class EventRequest(BaseModel):
     kind: Literal["read", "select", "finish"]
     chunk_id: str | None = Field(default=None, max_length=64)
     note_slug: str | None = Field(default=None, max_length=120)
+    lang: Lang = "es"
 
 
 class SessionState(BaseModel):
@@ -97,6 +100,7 @@ class ChunkOut(BaseModel):
 
 
 class NoteSummary(NoteRef):
+    lang: Lang = "es"
     tags: list[str]
     summary: str | None
     link: str | None
@@ -139,10 +143,12 @@ class NoteSource(BaseModel):
     slug: str = Field(pattern=r"^[a-z0-9-]+$", max_length=120)
     kind: Kind
     source: str = Field(max_length=200_000)
+    lang: Lang = "es"
 
 
 class IntentIn(BaseModel):
     id: str
+    lang: Lang = "es"
     label: str
     description: str = ""
     notes: list[str] = []

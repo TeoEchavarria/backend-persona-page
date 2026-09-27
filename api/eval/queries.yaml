@@ -58,7 +58,7 @@
   note: estadistica-y-probabilidad
   contains: tres años de estadística
 - query: z-score de la confianza
-  note: estadistica-y-probabilidad
+  note: este-portafolio
   contains: z-score
 - query: semantic search experience
   note: embeddings-y-busqueda-semantica

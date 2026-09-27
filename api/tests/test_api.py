@@ -49,6 +49,31 @@ def test_sync_updates_edits_and_removals(client):
     assert sync(client).json()["embedded"] == 3  # jardín's two paragraphs and the original soup
 
 
+def test_each_language_only_sees_its_own_notes(client):
+    payload = content_payload()
+    payload["notes"].append(
+        {
+            "slug": "jardin",
+            "kind": "project",
+            "lang": "en",
+            "source": "---\ntitle: Garden\ndate: 2025-05-01\n---\n\n## Plants\n\nTomato plants need direct sun.\n",
+        }
+    )
+    headers = {"Authorization": "Bearer test-token"}
+    report = client.put("/admin/content", json=payload, headers=headers).json()
+    assert report["notes"] == 4 and report["embedded"] == 1
+
+    english = search(client, "tomate sol", lang="en")
+    assert {r["note"]["slug"] for r in english["results"]} == {"jardin"}
+    assert english["results"][0]["text"] == "Tomato plants need direct sun."
+    assert english["confidence"]["message"].startswith(("This", "These", "Nothing"))
+    assert client.get("/notes/jardin", params={"lang": "en"}).json()["title"] == "Garden"
+    assert client.get("/notes/jardin").json()["title"] == "Jardín"
+    assert [n["slug"] for n in client.get("/notes", params={"lang": "en"}).json()] == ["jardin"]
+
+    assert sync(client).json()["removed_notes"] == 1  # back to the Spanish-only fixtures
+
+
 def test_search_returns_paragraph_note_and_score(client):
     body = search(client, "¿cuánto sol necesita el tomate?")
 
