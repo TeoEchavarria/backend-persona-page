@@ -69,6 +69,45 @@
 - query: cómo evalúas la calidad de un buscador
   note: embeddings-y-busqueda-semantica
   contains: consultas de prueba
+- query: agrupar noticias con embeddings
+  note: mismo-hecho-otras-palabras
+  contains: HDBSCAN
+- query: ¿qué modelos de machine learning has construido?
+  note: tribe
+  contains: ""
+- query: una app que no use internet
+  note: fime
+  contains: android.permission.INTERNET
+- query: estadística en producción
+  note: estadistica-y-probabilidad
+  contains: ""
+- query: ¿cómo funciona este buscador?
+  note: este-portafolio
+  contains: ""
+- query: ¿cómo funciona la búsqueda de este portafolio?
+  note: embeddings-y-busqueda-semantica
+  contains: ""
+- query: privacidad de los datos en el teléfono
+  note: fime
+  contains: ""
+- query: qué tecnologías usa la app de tarjetas
+  note: fime
+  contains: Kotlin
+- query: clustering de párrafos
+  note: mismo-hecho-otras-palabras
+  contains: ""
+- query: neurociencia y video
+  note: tribe
+  contains: ""
+- query: pagerank y cadenas de markov
+  note: este-portafolio
+  contains: ""
+- query: how do you evaluate search quality
+  note: embeddings-y-busqueda-semantica
+  contains: ""
+- query: experience with pytorch
+  note: tribe
+  contains: PyTorch
 # Sin respuesta en el contenido
 - query: receta de arepas con queso
   note: null
@@ -81,4 +120,16 @@
 - query: cómo cambiar la llanta de una bicicleta
   note: null
 - query: precio del dólar hoy
+  note: null
+- query: mejor restaurante en medellín
+  note: null
+- query: cómo hacer la declaración de renta
+  note: null
+- query: clima en bogotá mañana
+  note: null
+- query: horóscopo de hoy
+  note: null
+- query: cuántos goles lleva messi
+  note: null
+- query: how to bake sourdough bread
   note: null

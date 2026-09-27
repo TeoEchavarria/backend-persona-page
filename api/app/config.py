@@ -38,9 +38,9 @@ class Settings(BaseSettings):
     rrf_k: int = 60
 
     # Confidence bands on the margin (best − mean similarity), calibrated with scripts/calibrate.py
-    margin_high: float = 0.075
-    margin_medium: float = 0.046
-    gap_high: float = 0.045
+    margin_high: float = 0.07
+    margin_medium: float = 0.041
+    gap_high: float = 0.033
 
     # Rocchio
     rocchio_alpha: float = 0.7
