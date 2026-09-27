@@ -1,3 +1,4 @@
+import logging
 from contextlib import asynccontextmanager
 
 import psycopg
@@ -10,12 +11,18 @@ from app.config import get_settings
 from app.embeddings import get_encoder
 from app.routes import admin, events, notes, search
 
+logger = logging.getLogger(__name__)
+
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     # A local model loads in seconds; do it before the first request, not inside one.
+    # A failure here must not take /health down with it; searches report it instead.
     if get_settings().embedding_backend == "local":
-        get_encoder()
+        try:
+            get_encoder()
+        except RuntimeError as error:
+            logger.error("Could not load the local encoder: %s", error)
     yield
 
 
@@ -32,6 +39,11 @@ app.include_router(search.router)
 app.include_router(events.router)
 app.include_router(notes.router)
 app.include_router(admin.router)
+
+
+@app.get("/")
+def root():
+    return {"name": "portfolio-search", "health": "/health", "docs": "/docs"}
 
 
 @app.get("/health")

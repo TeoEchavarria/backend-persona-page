@@ -37,7 +37,13 @@ class _PrefixedEncoder:
 class LocalEncoder(_PrefixedEncoder):
     def __init__(self, settings: Settings):
         super().__init__(settings)
-        from sentence_transformers import SentenceTransformer
+        try:
+            from sentence_transformers import SentenceTransformer
+        except ImportError as error:
+            raise RuntimeError(
+                "EMBEDDING_BACKEND=local necesita sentence-transformers (uv sync --extra local). "
+                "En Vercel usa EMBEDDING_BACKEND=http."
+            ) from error
 
         self.model = SentenceTransformer(settings.embedding_model)
 
@@ -50,6 +56,8 @@ class HttpEncoder(_PrefixedEncoder):
     """Hugging Face feature-extraction API (serverless or a dedicated endpoint)."""
 
     def _encode(self, texts: list[str]) -> np.ndarray:
+        if not self.settings.embedding_api_token:
+            raise httpx.HTTPError("EMBEDDING_API_TOKEN no está configurado")
         url = self.settings.embedding_api_url.format(model=self.settings.embedding_model)
         headers = {"Authorization": f"Bearer {self.settings.embedding_api_token}"}
         response = httpx.post(url, json={"inputs": texts}, headers=headers, timeout=20)

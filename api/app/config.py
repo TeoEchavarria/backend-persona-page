@@ -1,7 +1,9 @@
+import os
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 API_DIR = Path(__file__).resolve().parents[1]
@@ -17,7 +19,10 @@ class Settings(BaseSettings):
     admin_token: str = ""
 
     # Embeddings: same model in both backends so indexed and query vectors match.
-    embedding_backend: Literal["local", "http"] = "local"
+    # Vercel sets VERCEL=1 and cannot load torch, so there it defaults to the HTTP backend.
+    embedding_backend: Literal["local", "http"] = Field(
+        default_factory=lambda: "http" if os.environ.get("VERCEL") else "local"
+    )
     embedding_model: str = "intfloat/multilingual-e5-small"
     embedding_dim: int = 384
     query_prefix: str = "query: "
