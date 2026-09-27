@@ -48,9 +48,18 @@ def root():
 
 @app.get("/health")
 def health():
+    """Tells an unreachable database apart from one that is reachable but not synced yet."""
     try:
-        with db.connect() as conn:
-            db.ping(conn)
-    except psycopg.Error:
+        with psycopg.connect(get_settings().database_url, connect_timeout=5) as conn:
+            has_vector = conn.execute("select 1 from pg_extension where extname = 'vector'").fetchone()
+            has_notes = conn.execute("select to_regclass('notes')").fetchone()[0] is not None
+            notes = conn.execute("select count(*) from notes").fetchone()[0] if has_notes else 0
+    except psycopg.Error as error:
+        logger.error("Health check failed: %s", error)
         return JSONResponse({"status": "error", "database": "unreachable"}, status_code=503)
-    return {"status": "ok", "database": "ok"}
+    if not (has_vector and has_notes):
+        return JSONResponse(
+            {"status": "error", "database": "ok", "schema": "missing — run the first content sync"},
+            status_code=503,
+        )
+    return {"status": "ok", "database": "ok", "notes": notes}

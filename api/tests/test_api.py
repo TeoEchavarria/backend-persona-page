@@ -18,7 +18,7 @@ def read(client, session_id: str, chunk_id: str, kind: str = "read") -> dict:
 
 
 def test_health(client):
-    assert client.get("/health").json() == {"status": "ok", "database": "ok"}
+    assert client.get("/health").json() == {"status": "ok", "database": "ok", "notes": 3}
 
 
 def test_syncing_the_same_content_embeds_nothing(client):
