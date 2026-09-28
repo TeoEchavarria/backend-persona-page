@@ -4,7 +4,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
-Kind = Literal["project", "skill", "note", "experience"]
+Kind = Literal["project", "skill", "note", "experience", "education"]
 Lang = Literal["es", "en"]
 Band = Literal["high", "medium", "far"]
 
