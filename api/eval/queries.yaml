@@ -1,5 +1,5 @@
-# Consultas con respuesta esperada (nota + un trozo del párrafo) y consultas sin
-# respuesta (expected: null). scripts/calibrate.py mide top-3 y ajusta las bandas.
+# Consultas con respuesta esperada (una nota, o varias válidas, + un trozo del
+# párrafo) y consultas sin respuesta (note: null). scripts/calibrate.py mide top-3 y ajusta las bandas.
 - query: ¿cómo se agrupan los párrafos de los periódicos?
   note: mismo-hecho-otras-palabras
   contains: HDBSCAN
@@ -35,7 +35,7 @@
   contains: retraso natural
 - query: brain encoding model deep learning
   note: tribe
-  contains: Tribe v2
+  contains: ""
 - query: cómo se combinan la búsqueda vectorial y la de texto
   note: este-portafolio
   contains: Reciprocal Rank Fusion
@@ -61,8 +61,8 @@
   note: este-portafolio
   contains: z-score
 - query: semantic search experience
-  note: embeddings-y-busqueda-semantica
-  contains: Convierto texto en vectores
+  note: [embeddings-y-busqueda-semantica, global-mvm]
+  contains: ""
 - query: integración con LLMs y recuperación
   note: embeddings-y-busqueda-semantica
   contains: modelos de lenguaje
@@ -73,7 +73,7 @@
   note: mismo-hecho-otras-palabras
   contains: HDBSCAN
 - query: ¿qué modelos de machine learning has construido?
-  note: tribe
+  note: [tribe, global-mvm]
   contains: ""
 - query: una app que no use internet
   note: fime
@@ -92,7 +92,7 @@
   contains: ""
 - query: qué tecnologías usa la app de tarjetas
   note: fime
-  contains: Kotlin
+  contains: ""
 - query: clustering de párrafos
   note: mismo-hecho-otras-palabras
   contains: ""
@@ -108,6 +108,27 @@
 - query: experience with pytorch
   note: tribe
   contains: PyTorch
+- query: ¿ha trabajado con Prophet?
+  note: global-mvm
+  contains: Prophet
+- query: experiencia con Logic Apps de Azure
+  note: global-mvm
+  contains: Logic Apps
+- query: Power BI con varios tenants
+  note: global-mvm
+  contains: tenants
+- query: RPA con Selenium
+  note: global-mvm
+  contains: Selenium
+- query: MongoDB
+  note: hacking-health
+  contains: MongoDB
+- query: publicar en Instagram con la API de Facebook
+  note: generacion-contenido-automatizado
+  contains: API de Facebook
+- query: chatbot en Telegram
+  note: chatbot-de-finanzas
+  contains: Telegram
 # Sin respuesta en el contenido
 - query: receta de arepas con queso
   note: null

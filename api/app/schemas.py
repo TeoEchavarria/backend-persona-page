@@ -46,6 +46,7 @@ class ConfidenceOut(BaseModel):
     gap: float
     top_similarity: float
     mean_similarity: float
+    lexical: bool = False
     margin_high: float
     margin_medium: float
     gap_high: float

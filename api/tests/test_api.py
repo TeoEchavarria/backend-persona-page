@@ -34,6 +34,14 @@ def test_sync_requires_the_admin_token(client):
     assert client.put("/admin/content", json=content_payload(), headers=wrong).status_code == 401
 
 
+def test_sync_names_the_note_with_broken_frontmatter(client):
+    payload = content_payload()
+    payload["notes"].append({"slug": "rota", "kind": "project", "source": "---\nsummary: uno: dos\n---\n\nTexto.\n"})
+    response = client.put("/admin/content", json=payload, headers={"Authorization": "Bearer test-token"})
+    assert response.status_code == 422
+    assert "es/rota" in response.json()["detail"]
+
+
 def test_sync_updates_edits_and_removals(client):
     payload = content_payload()
     cocina = next(note for note in payload["notes"] if note["slug"] == "cocina")

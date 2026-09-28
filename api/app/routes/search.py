@@ -33,8 +33,13 @@ def run_search(
     hits, total = search.hybrid_search(conn, query, ranked_by, request.kind, settings, request.since, request.lang)
     # Confidence is judged on the literal query: context may reorder results, never make them look closer.
     stats = db.similarity_stats(conn, query_vector, request.kind, request.since, request.lang)
-    confidence = search.confidence(stats, settings, request.lang)
-    rows = db.fetch_chunks(conn, [hit.chunk_id for hit in hits], query_vector, query)
+    # Judged on the literal query's ranking: the context may reorder, never make a match look closer.
+    literal_hits, _ = (
+        (hits, total) if ranked_by is query_vector
+        else search.hybrid_search(conn, query, query_vector, request.kind, settings, request.since, request.lang)
+    )
+    confidence = search.confidence(stats, settings, request.lang, search.lexical_agreement(literal_hits))
+    rows = db.fetch_chunks(conn, [hit.chunk_id for hit in hits], query_vector, query, request.lang)
     results = [_result(hit, rows[hit.chunk_id]) for hit in hits if hit.chunk_id in rows]
     if request.order == "date":
         results.sort(key=lambda result: result.note.published or dt.date.min, reverse=True)
@@ -55,6 +60,7 @@ def run_search(
             gap=confidence.gap,
             top_similarity=confidence.top_similarity,
             mean_similarity=stats.mean,
+            lexical=confidence.lexical,
             margin_high=settings.margin_high,
             margin_medium=settings.margin_medium,
             gap_high=settings.gap_high,

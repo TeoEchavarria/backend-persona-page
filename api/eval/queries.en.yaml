@@ -76,8 +76,23 @@
   note: embeddings-y-busqueda-semantica
   contains: test queries
 - query: what machine learning models have you built?
-  note: tribe
+  note: [tribe, global-mvm]
   contains: ""
+- query: have you worked with LSTM?
+  note: global-mvm
+  contains: LSTM
+- query: experience with Azure App Services
+  note: global-mvm
+  contains: App Services
+- query: Flask APIs
+  note: generacion-contenido-automatizado
+  contains: Flask
+- query: MongoDB experience
+  note: hacking-health
+  contains: MongoDB
+- query: Telegram chatbot
+  note: chatbot-de-finanzas
+  contains: Telegram
 # No answer in the content
 - query: cheese arepa recipe
   note: null

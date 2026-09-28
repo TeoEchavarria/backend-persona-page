@@ -28,6 +28,7 @@ class Confidence:
     gap: float
     top_similarity: float
     message: str
+    lexical: bool = False
 
 
 @dataclass(frozen=True)
@@ -50,25 +51,31 @@ def z_score(value: float, mean: float, std: float) -> float:
     return 0.0 if std == 0 else (value - mean) / std
 
 
-def confidence_band(margin: float, gap: float, settings: Settings) -> str:
+def confidence_band(margin: float, gap: float, settings: Settings, lexical: bool = False) -> str:
     """Bands use the raw margin over the mean, not z: off-topic queries score uniformly low,
-    which shrinks the spread and inflates their z-score."""
+    which shrinks the spread and inflates their z-score. A short query naming a technology ("LSTM")
+    has little semantic margin but strong literal evidence, so a lexical match is never "far"."""
     if margin >= settings.margin_high or (margin >= settings.margin_medium and gap >= settings.gap_high):
         return "high"
-    if margin >= settings.margin_medium:
+    if margin >= settings.margin_medium or lexical:
         return "medium"
     return "far"
 
 
-def confidence(stats: db.SimilarityStats, settings: Settings, lang: str = "es") -> Confidence:
+def lexical_agreement(hits: list[Hit]) -> bool:
+    """The best hit is also first by words and near the top by meaning: literal evidence it answers."""
+    return bool(hits) and hits[0].text_rank == 1 and (hits[0].vector_rank or 99) <= 3
+
+
+def confidence(stats: db.SimilarityStats, settings: Settings, lang: str = "es", lexical: bool = False) -> Confidence:
     messages = MESSAGES.get(lang, MESSAGES["es"])
     if not stats.top:
         return Confidence("far", 0.0, 0.0, 0.0, 0.0, messages["far"])
     top = stats.top[0]
     gap = top - stats.top[1] if len(stats.top) > 1 else 0.0
     margin = top - stats.mean
-    band = confidence_band(margin, gap, settings)
-    return Confidence(band, margin, z_score(top, stats.mean, stats.std), gap, top, messages[band])
+    band = confidence_band(margin, gap, settings, lexical)
+    return Confidence(band, margin, z_score(top, stats.mean, stats.std), gap, top, messages[band], lexical)
 
 
 def hybrid_search(

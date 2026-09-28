@@ -184,6 +184,14 @@ def similarity_stats(
     return SimilarityStats(row["mean"] or 0.0, row["std"], list(row["top"] or []))
 
 
+def _text_search(lang: str) -> tuple[str, str]:
+    """(config, tsvector) for a language. Spanish uses the indexed column; English notes are few enough
+    to stem at query time with the English dictionary, so its stopwords ("have", "with") stop counting."""
+    if lang == "en":
+        return "english", "to_tsvector('english', c.text_with_context)"
+    return get_settings().text_search_config, "c.tsv"
+
+
 def _or_query(config: str) -> str:
     # plainto_tsquery ANDs every word; OR-ing them suits natural-language questions better.
     return f"nullif(replace(plainto_tsquery('{config}', %(q)s)::text, '&', '|'), '')::tsquery"
@@ -197,13 +205,13 @@ def text_ranking(
     since: int | None = None,
     lang: str = "es",
 ) -> list[tuple[str, float]]:
-    config = get_settings().text_search_config
+    config, tsv = _text_search(lang)
     rows = conn.execute(
         f"""
         with q as (select {_or_query(config)} as tsq)
-        select c.id, ts_rank(c.tsv, q.tsq) as rank
+        select c.id, ts_rank({tsv}, q.tsq) as rank
         from chunks c join notes n on n.id = c.note_id, q
-        where q.tsq is not null and c.tsv @@ q.tsq and {_KIND_FILTER}
+        where q.tsq is not null and {tsv} @@ q.tsq and {_KIND_FILTER}
         order by rank desc
         limit %(limit)s
         """,
@@ -215,9 +223,11 @@ def text_ranking(
 HIGHLIGHT_START, HIGHLIGHT_END = "\u27e6", "\u27e7"  # ⟦ ⟧: never in the notes, easy to split on
 
 
-def fetch_chunks(conn: psycopg.Connection, ids: list[str], vector: np.ndarray, query: str = "") -> dict[str, dict]:
+def fetch_chunks(
+    conn: psycopg.Connection, ids: list[str], vector: np.ndarray, query: str = "", lang: str = "es"
+) -> dict[str, dict]:
     """The chunks with their note, similarity to `vector`, and the text with query terms marked ⟦like this⟧."""
-    config = get_settings().text_search_config
+    config, _ = _text_search(lang)
     rows = conn.execute(
         f"""
         with q as (select {_or_query(config)} as tsq)

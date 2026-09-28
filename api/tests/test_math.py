@@ -29,6 +29,8 @@ def test_confidence_bands():
     assert confidence_band(0.06, 0.05, settings) == "high"
     assert confidence_band(0.06, 0.01, settings) == "medium"
     assert confidence_band(0.03, 0.50, settings) == "far"
+    # A short query naming a technology has little margin but literal evidence: never "far".
+    assert confidence_band(0.03, 0.0, settings, lexical=True) == "medium"
 
 
 def test_confidence_from_similarity_stats():

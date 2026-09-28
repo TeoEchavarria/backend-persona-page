@@ -29,7 +29,7 @@ api/
     routes/          search, events, notes, admin
   scripts/
     calibrate.py     top-3 y umbrales de confianza con eval/queries.yaml
-  eval/queries.yaml  48 consultas de prueba, 12 sin respuesta
+  eval/queries*.yaml  consultas de prueba por idioma (es, en)
   tests/             incluye unas notas de prueba en tests/fixtures
   index.py           punto de entrada para Vercel
 ```
@@ -78,26 +78,37 @@ términos unidos por OR. Las dos listas (30 candidatos cada una) se fusionan con
 aproximado: con menos de ~50.000 fragmentos no hace falta.
 
 **Confianza.** Se juzga con la consulta literal, no con la mezclada con el
-contexto. Las bandas usan el **margen** (mejor similitud − similitud media de
-todos los fragmentos) y la brecha entre el primero y el segundo. El z-score
-también se calcula y se devuelve, pero no decide: en el set de prueba, las
-consultas sin respuesta tienen una dispersión menor, lo que infla su z (2,58
-para "horario de atención de la tienda", por encima de varias consultas con
-respuesta). El margen separa mejor, pero no perfecto. Con 48 consultas (36 con
-respuesta, 12 sin ella), el corte en 0,041 deja fuera de la banda lejana 35 de
-36 consultas con respuesta, y dentro 9 de 12 sin respuesta. Las tres que se
-escapan ("declaración de renta", "precio del dólar", "horario de atención")
-caen en la banda media, cuyo mensaje ya advierte que puede no ser lo que se
-busca. Se eligió ese error sobre el contrario: marcar como lejana una buena
-respuesta. Entre 0,036 y 0,047 se mezclan ambas clases; contar palabras en
-común no las separaba sin sobreajustar. El top-3 es 34/36.
+contexto. Hay dos señales:
 
-Los umbrales dependen del corpus: al agregar notas, conviene volver a correr
-`scripts.calibrate` y copiar los valores sugeridos al `.env`. Las consultas de
-`eval/queries.yaml` apuntan a las notas actuales, así que hay que actualizarlas
-junto con el contenido. Los embeddings de Hugging Face y los locales coinciden
-(mismas similitudes a tres decimales), así que calibrar en local sirve para
-producción.
+- **Margen:** mejor similitud − similitud media de todos los fragmentos, más la
+  brecha entre el primero y el segundo. El z-score también se calcula y se
+  devuelve, pero no decide: las consultas sin respuesta tienen menos dispersión
+  y eso infla su z.
+- **Evidencia literal:** el mejor resultado también es el primero por palabras
+  y está entre los tres primeros por significado. Una búsqueda corta con el
+  nombre de una tecnología ("LSTM", "Prophet") tiene poco margen semántico
+  pero una coincidencia exacta; con evidencia literal, un resultado nunca es
+  "lejano".
+
+Con el set de prueba, 55 consultas en español (12 sin respuesta) y 41 en
+inglés (10 sin respuesta):
+
+| | Con respuesta fuera de "lejana" | Sin respuesta en "lejana" | Top-3 |
+|---|---|---|---|
+| Español | 41/43 | 9/12 | 40/43 |
+| Inglés | 31/31 | 8/10 | 30/31 |
+
+Las que se escapan caen en la banda media, cuyo mensaje ya advierte que puede
+no ser lo que se busca. Se prefiere ese error al contrario: marcar como lejana
+una buena respuesta. El texto en inglés usa el diccionario `english` de
+Postgres (stopwords y stemming), calculado al vuelo: con este volumen no hace
+falta índice.
+
+Los umbrales dependen del corpus. Al agregar notas, conviene volver a correr
+`scripts.calibrate` (con `--lang es` y `--lang en`) y actualizar
+`eval/queries*.yaml`, donde cada consulta puede aceptar varias notas válidas.
+Los embeddings de Hugging Face y los locales coinciden (mismas similitudes a
+tres decimales), así que calibrar en local sirve para producción.
 
 **Resaltado.** Cada resultado trae `highlighted`, el párrafo con los términos
 de la consulta marcados por `ts_headline` (con stemming en español, así que

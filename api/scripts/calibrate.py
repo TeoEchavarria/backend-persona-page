@@ -29,6 +29,7 @@ class Outcome:
     margin: float
     z: float
     gap: float
+    lexical: bool
 
 
 def evaluate(lang: str) -> list[Outcome]:
@@ -38,14 +39,17 @@ def evaluate(lang: str) -> list[Outcome]:
     outcomes = []
     with db.connect() as conn:
         for case, vector in zip(cases, vectors):
-            hits = search.hybrid_search(conn, case["query"], vector, None, settings, lang=lang)[0][:3]
-            rows = db.fetch_chunks(conn, [hit.chunk_id for hit in hits], vector)
+            all_hits = search.hybrid_search(conn, case["query"], vector, None, settings, lang=lang)[0]
+            hits = all_hits[:3]
+            rows = db.fetch_chunks(conn, [hit.chunk_id for hit in hits], vector, lang=lang)
+            expected = case["note"] if isinstance(case["note"], list) else [case["note"]]
             found = any(
-                row["slug"] == case["note"] and case.get("contains", "").lower() in row["text"].lower()
+                row["slug"] in expected and case.get("contains", "").lower() in row["text"].lower()
                 for row in rows.values()
             )
-            confidence = search.confidence(db.similarity_stats(conn, vector, None, lang=lang), settings, lang)
-            outcomes.append(Outcome(case["query"], case["note"] is not None, found, confidence.margin, confidence.z, confidence.gap))
+            lexical = search.lexical_agreement(all_hits)
+            confidence = search.confidence(db.similarity_stats(conn, vector, None, lang=lang), settings, lang, lexical)
+            outcomes.append(Outcome(case["query"], case["note"] is not None, found, confidence.margin, confidence.z, confidence.gap, lexical))
     return outcomes
 
 
@@ -53,7 +57,10 @@ def best_thresholds(outcomes: list[Outcome]) -> tuple[float, float, float]:
     """Grid search: answerable queries should not be 'far', unanswerable ones should."""
     answerable = [o for o in outcomes if o.answerable]
     unanswerable = [o for o in outcomes if not o.answerable]
-    values = sorted({o.margin for o in outcomes})
+    # The margin cut only matters without literal evidence: lexical matches are never "far".
+    answerable = [o for o in answerable if not o.lexical]
+    unanswerable = [o for o in unanswerable if not o.lexical]
+    values = sorted({o.margin for o in answerable + unanswerable})
     cuts = [(a + b) / 2 for a, b in zip(values, values[1:])] or [values[0]]
 
     def correct(cut: float) -> int:
@@ -71,16 +78,16 @@ def main(lang: str) -> None:
     settings = get_settings()
     outcomes = evaluate(lang)
     for o in outcomes:
-        band = search.confidence_band(o.margin, o.gap, settings)
+        band = search.confidence_band(o.margin, o.gap, settings, o.lexical)
         mark = "·" if not o.answerable else ("✓" if o.found else "✗")
-        print(f"{mark} margen={o.margin:.3f} z={o.z:5.2f} brecha={o.gap:.3f} {band:6} {o.query}")
+        print(f"{mark} margen={o.margin:.3f} z={o.z:5.2f} brecha={o.gap:.3f} {'L' if o.lexical else ' '} {band:6} {o.query}")
 
     answerable = [o for o in outcomes if o.answerable]
     print(f"\ntop-3: {sum(o.found for o in answerable)}/{len(answerable)}")
 
     margin_medium, margin_high, gap_high = best_thresholds(outcomes)
-    far_ok = sum(search.confidence_band(o.margin, o.gap, settings) == "far" for o in outcomes if not o.answerable)
-    not_far = sum(search.confidence_band(o.margin, o.gap, settings) != "far" for o in answerable)
+    far_ok = sum(search.confidence_band(o.margin, o.gap, settings, o.lexical) == "far" for o in outcomes if not o.answerable)
+    not_far = sum(search.confidence_band(o.margin, o.gap, settings, o.lexical) != "far" for o in answerable)
     print(f"umbrales actuales: {far_ok}/{len(outcomes) - len(answerable)} sin respuesta en banda lejana, "
           f"{not_far}/{len(answerable)} con respuesta fuera de ella")
     print(f"\nsugerido:\nMARGIN_HIGH={margin_high}\nMARGIN_MEDIUM={margin_medium}\nGAP_HIGH={gap_high}")

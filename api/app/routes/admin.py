@@ -1,5 +1,6 @@
 import secrets
 
+import yaml
 from fastapi import APIRouter, Depends, Header, HTTPException
 
 from app import db, ingest
@@ -22,7 +23,12 @@ def require_admin(authorization: str = Header(default=""), settings: Settings = 
 @router.put("/content", response_model=SyncResult, dependencies=[Depends(require_admin)])
 def sync_content(content: ContentSync, encoder: Encoder = Depends(get_encoder)) -> SyncResult:
     """Replace the whole content with what the frontend sends. Only new or edited paragraphs are embedded."""
-    notes = [parse_source(note.slug, note.kind, note.source, note.lang) for note in content.notes]
+    notes = []
+    for note in content.notes:
+        try:
+            notes.append(parse_source(note.slug, note.kind, note.source, note.lang))
+        except yaml.YAMLError as error:
+            raise HTTPException(422, f"Frontmatter inválido en {note.lang}/{note.slug}: {error}") from error
     keys = [(note.slug, note.lang) for note in notes]
     if len(keys) != len(set(keys)):
         raise HTTPException(422, "Hay notas con el mismo slug en el mismo idioma")
