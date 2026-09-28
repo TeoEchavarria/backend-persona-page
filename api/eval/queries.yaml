@@ -129,6 +129,15 @@
 - query: chatbot en Telegram
   note: chatbot-de-finanzas
   contains: Telegram
+- query: ¿tiene título universitario?
+  note: universidad-nacional
+  contains: ""
+- query: formación académica
+  note: universidad-nacional
+  contains: ""
+- query: ¿cuándo se gradúa?
+  note: universidad-nacional
+  contains: "2027"
 # Sin respuesta en el contenido
 - query: receta de arepas con queso
   note: null

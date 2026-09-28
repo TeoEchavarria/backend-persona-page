@@ -93,6 +93,12 @@
 - query: Telegram chatbot
   note: chatbot-de-finanzas
   contains: Telegram
+- query: where did you study?
+  note: universidad-nacional
+  contains: ""
+- query: when do you graduate?
+  note: universidad-nacional
+  contains: "2027"
 # No answer in the content
 - query: cheese arepa recipe
   note: null
