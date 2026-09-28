@@ -15,7 +15,7 @@ create table if not exists notes (
 -- Databases created before notes had a date or the 'note' kind.
 alter table notes add column if not exists published date;
 alter table notes drop constraint if exists notes_kind_check;
-alter table notes add constraint notes_kind_check check (kind in ('project', 'skill', 'note'));
+alter table notes add constraint notes_kind_check check (kind in ('project', 'skill', 'note', 'experience'));
 
 -- Every note exists once per language: the same slug in 'es' and 'en'.
 alter table notes add column if not exists lang text not null default 'es';

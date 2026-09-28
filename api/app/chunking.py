@@ -7,7 +7,7 @@ import frontmatter
 from markdown_it import MarkdownIt
 from markdown_it.token import Token
 
-KIND_BY_FOLDER = {"proyectos": "project", "skills": "skill", "anotaciones": "note"}
+KIND_BY_FOLDER = {"proyectos": "project", "skills": "skill", "anotaciones": "note", "experiencia": "experience"}
 CONTEXT_DEPTH = 2
 
 _markdown = MarkdownIt("commonmark")
